@@ -1,0 +1,18 @@
+# FitScan - 优化版依赖
+# 使用性能优化版本
+
+# OpenCV - 使用 contrib 版本获得更好性能
+opencv-contrib-python==4.8.1.78
+
+# MediaPipe - 使用最新稳定版
+mediapipe==0.10.8
+
+# NumPy - 使用优化版本
+numpy==1.24.3
+
+# TensorFlow Lite Runtime - 使用优化版本（MediaPipe 依赖）
+tflite-runtime==2.14.0
+
+# 性能优化库
+# psutil - 系统资源监控（可选）
+# psutil==5.9.5
