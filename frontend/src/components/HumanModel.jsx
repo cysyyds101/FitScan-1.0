@@ -1,19 +1,106 @@
 import { useState, useEffect, useRef } from 'react';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+
+/**
+ * GeometricHumanModel Component
+ * Creates a simple geometric human body using Three.js primitives
+ * This is used as a fallback when no GLB model is available
+ */
+export function GeometricHumanModel({ position = [0, 0, 0], scale = 1, onLoad }) {
+  const groupRef = useRef();
+  
+  useEffect(() => {
+    if (onLoad && groupRef.current) {
+      onLoad(groupRef.current);
+    }
+  }, []);
+  
+  return (
+    <group ref={groupRef} position={position} scale={scale}>
+      {/* Head */}
+      <mesh position={[0, 1.5, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[0.12, 32, 32]} />
+        <meshStandardMaterial color="#e8c4a0" />
+      </mesh>
+      
+      {/* Neck */}
+      <mesh position={[0, 1.35, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.05, 0.06, 0.1, 16]} />
+        <meshStandardMaterial color="#e8c4a0" />
+      </mesh>
+      
+      {/* Torso */}
+      <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.2, 0.4, 8, 16]} />
+        <meshStandardMaterial color="#4a90d9" />
+      </mesh>
+      
+      {/* Left Upper Arm */}
+      <mesh position={[-0.3, 1.05, 0]} rotation={[0, 0, 0.3]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.05, 0.3, 8, 16]} />
+        <meshStandardMaterial color="#4a90d9" />
+      </mesh>
+      
+      {/* Right Upper Arm */}
+      <mesh position={[0.3, 1.05, 0]} rotation={[0, 0, -0.3]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.05, 0.3, 8, 16]} />
+        <meshStandardMaterial color="#4a90d9" />
+      </mesh>
+      
+      {/* Left Forearm */}
+      <mesh position={[-0.42, 0.78, 0]} rotation={[0, 0, 0.2]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.04, 0.28, 8, 16]} />
+        <meshStandardMaterial color="#e8c4a0" />
+      </mesh>
+      
+      {/* Right Forearm */}
+      <mesh position={[0.42, 0.78, 0]} rotation={[0, 0, -0.2]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.04, 0.28, 8, 16]} />
+        <meshStandardMaterial color="#e8c4a0" />
+      </mesh>
+      
+      {/* Left Thigh */}
+      <mesh position={[-0.1, 0.52, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.08, 0.38, 8, 16]} />
+        <meshStandardMaterial color="#2c3e50" />
+      </mesh>
+      
+      {/* Right Thigh */}
+      <mesh position={[0.1, 0.52, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.08, 0.38, 8, 16]} />
+        <meshStandardMaterial color="#2c3e50" />
+      </mesh>
+      
+      {/* Left Shin */}
+      <mesh position={[-0.1, 0.18, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.055, 0.36, 8, 16]} />
+        <meshStandardMaterial color="#2c3e50" />
+      </mesh>
+      
+      {/* Right Shin */}
+      <mesh position={[0.1, 0.18, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[0.055, 0.36, 8, 16]} />
+        <meshStandardMaterial color="#2c3e50" />
+      </mesh>
+    </group>
+  );
+}
 
 /**
  * HumanModel Component
  * Loads and displays a 3D human body model from GLB file
+ * Falls back to geometric model if GLB loading fails
  * 
- * @param {string} modelUrl - Path to the GLB model file
- * @param {Object} position - Initial position [x, y, z]
- * @param {Object} scale - Initial scale
- * @param {Function} onLoad - Callback when model loads
- * @param {Function} onError - Callback on load error
+ * @param {Object} props
+ * @param {string} props.modelUrl - Path to the GLB model file (optional)
+ * @param {Array} props.position - Initial position [x, y, z]
+ * @param {Array} props.scale - Initial scale
+ * @param {Function} props.onLoad - Callback when model loads
+ * @param {Function} props.onError - Callback on load error
  */
 export function HumanModel({ 
-  modelUrl = '/models/human/default.glb',
+  modelUrl = null,
   position = [0, 0, 0],
   scale = [1, 1, 1],
   onLoad,
@@ -21,11 +108,17 @@ export function HumanModel({
 }) {
   const groupRef = useRef();
   const [model, setModel] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [useGeometric, setUseGeometric] = useState(!modelUrl);
   
-  // Load the GLB model
+  // Load the GLB model if URL is provided
   useEffect(() => {
+    if (!modelUrl) {
+      setUseGeometric(true);
+      return;
+    }
+    
     let mounted = true;
     
     const loadModel = async () => {
@@ -39,8 +132,7 @@ export function HumanModel({
             modelUrl,
             (gltf) => resolve(gltf),
             (progress) => {
-              // Progress callback
-              console.log(`Loading: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+              console.log(`Loading human model: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
             },
             (err) => reject(err)
           );
@@ -54,18 +146,13 @@ export function HumanModel({
         // Traverse and configure model
         loadedModel.traverse((child) => {
           if (child.isMesh) {
-            // Enable shadows
             child.castShadow = true;
             child.receiveShadow = true;
-            
-            // Ensure material properties
             if (child.material) {
               child.material.side = THREE.DoubleSide;
             }
           }
-          
           if (child.isSkinnedMesh) {
-            // Configure skinned mesh
             child.castShadow = true;
             child.receiveShadow = true;
           }
@@ -75,20 +162,19 @@ export function HumanModel({
         normalizeModel(loadedModel);
         
         setModel(loadedModel);
+        setUseGeometric(false);
         setLoading(false);
         
         if (onLoad) {
           onLoad(loadedModel);
         }
         
-        // Preload for better performance
-        useGLTF.preload(modelUrl);
-        
       } catch (err) {
         if (!mounted) return;
         
-        console.error('Failed to load human model:', err);
-        setError(err.message || 'Failed to load model');
+        console.warn('Failed to load human model, using geometric fallback:', err.message);
+        setError(err.message);
+        setUseGeometric(true);
         setLoading(false);
         
         if (onError) {
@@ -106,93 +192,51 @@ export function HumanModel({
   
   // Normalize model to fit in view
   const normalizeModel = (model) => {
-    // Calculate bounding box
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
     
-    // Scale to fit height of 1.7 meters (average human height)
+    // Scale to fit height of 1.7 meters
     const targetHeight = 1.7;
-    const currentHeight = size.y;
-    const scaleFactor = targetHeight / currentHeight;
+    const scaleFactor = targetHeight / size.y;
     
     model.scale.setScalar(scaleFactor);
     
-    // Recalculate after scaling
+    // Center the model
     box.setFromObject(model);
-    const newCenter = box.getCenter(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
     
-    // Center the model at origin, sitting on the ground
-    model.position.x = -newCenter.x;
-    model.position.y = -box.min.y; // Place on ground
-    model.position.z = -newCenter.z;
+    model.position.x = -center.x;
+    model.position.y = -box.min.y;
+    model.position.z = -center.z;
   };
   
-  if (loading) {
-    return null;
+  // Show geometric model while loading
+  if (loading || useGeometric) {
+    return (
+      <GeometricHumanModel 
+        position={position} 
+        scale={scale} 
+        onLoad={onLoad}
+      />
+    );
   }
   
-  if (error) {
-    console.warn('HumanModel error:', error);
-    return null;
+  // Show loaded GLB model
+  if (model) {
+    return (
+      <group ref={groupRef} position={position} scale={scale}>
+        <primitive object={model} />
+      </group>
+    );
   }
   
+  // Fallback to geometric model on error
   return (
-    <group ref={groupRef} position={position} scale={scale}>
-      <primitive object={model} />
-    </group>
-  );
-}
-
-/**
- * Create a fallback geometric human model
- * Used when no GLB model is available
- */
-export function GeometricHumanModel({ position = [0, 0, 0], scale = 1 }) {
-  return (
-    <group position={position} scale={scale}>
-      {/* Head */}
-      <mesh position={[0, 1.5, 0]} castShadow>
-        <sphereGeometry args={[0.12, 32, 32]} />
-        <meshStandardMaterial color="#e8c4a0" />
-      </mesh>
-      
-      {/* Neck */}
-      <mesh position={[0, 1.35, 0]} castShadow>
-        <cylinderGeometry args={[0.05, 0.06, 0.1, 16]} />
-        <meshStandardMaterial color="#e8c4a0" />
-      </mesh>
-      
-      {/* Torso */}
-      <mesh position={[0, 1.0, 0]} castShadow>
-        <capsuleGeometry args={[0.2, 0.4, 8, 16]} />
-        <meshStandardMaterial color="#4a90d9" />
-      </mesh>
-      
-      {/* Left Arm */}
-      <mesh position={[-0.3, 1.0, 0]} rotation={[0, 0, 0.3]} castShadow>
-        <capsuleGeometry args={[0.05, 0.35, 8, 16]} />
-        <meshStandardMaterial color="#4a90d9" />
-      </mesh>
-      
-      {/* Right Arm */}
-      <mesh position={[0.3, 1.0, 0]} rotation={[0, 0, -0.3]} castShadow>
-        <capsuleGeometry args={[0.05, 0.35, 8, 16]} />
-        <meshStandardMaterial color="#4a90d9" />
-      </mesh>
-      
-      {/* Left Leg */}
-      <mesh position={[-0.1, 0.5, 0]} castShadow>
-        <capsuleGeometry args={[0.07, 0.45, 8, 16]} />
-        <meshStandardMaterial color="#2c3e50" />
-      </mesh>
-      
-      {/* Right Leg */}
-      <mesh position={[0.1, 0.5, 0]} castShadow>
-        <capsuleGeometry args={[0.07, 0.45, 8, 16]} />
-        <meshStandardMaterial color="#2c3e50" />
-      </mesh>
-    </group>
+    <GeometricHumanModel 
+      position={position} 
+      scale={scale} 
+      onLoad={onLoad}
+    />
   );
 }
 
