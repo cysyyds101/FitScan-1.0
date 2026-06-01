@@ -1,4 +1,4 @@
-/* ClothingControls Component Styles */
+/* ClothingControls 组件样式 */
 
 .clothing-controls {
   width: 280px;
@@ -9,7 +9,7 @@
   overflow-y: auto;
 }
 
-/* Tab Navigation */
+/* Tab 导航 */
 .controls-tabs {
   display: flex;
   border-bottom: 1px solid #e0e0e0;
@@ -40,7 +40,7 @@
   background: white;
 }
 
-/* Tab Content */
+/* Tab 内容 */
 .controls-content {
   padding: 16px;
   flex: 1;
@@ -55,7 +55,7 @@
   letter-spacing: 0.5px;
 }
 
-/* Slider Control */
+/* 滑块控制 */
 .slider-control {
   margin-bottom: 16px;
 }
@@ -108,7 +108,7 @@
   text-align: right;
 }
 
-/* Physics Toggle */
+/* 物理效果开关 */
 .physics-toggle {
   width: 100%;
   padding: 10px;
@@ -127,7 +127,7 @@
   background: #3a7bc8;
 }
 
-/* Upload Section */
+/* 上传区域 */
 .upload-section {
   padding: 16px;
   border-top: 1px solid #e0e0e0;
@@ -160,7 +160,7 @@
   color: #4a90d9;
 }
 
-/* Preset Grid */
+/* 预设服装网格 */
 .preset-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -202,7 +202,7 @@
   color: #4a90d9;
 }
 
-/* Remove Button */
+/* 移除按钮 */
 .remove-button {
   width: 100%;
   padding: 8px;
@@ -220,7 +220,7 @@
   background: #f44336;
 }
 
-/* Responsive */
+/* 响应式 */
 @media (max-width: 768px) {
   .clothing-controls {
     width: 100%;

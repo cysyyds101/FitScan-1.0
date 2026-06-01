@@ -1,4 +1,4 @@
-/* VirtualTryOn Component Styles */
+/* VirtualTryOn 组件样式 */
 
 .virtual-tryon-container {
   display: flex;
@@ -83,7 +83,7 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* Responsive */
+/* 响应式 */
 @media (max-width: 768px) {
   .virtual-tryon-container {
     flex-direction: column;

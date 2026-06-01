@@ -9,14 +9,14 @@ import { ClothingControls } from './ClothingControls';
 import './VirtualTryOn.css';
 
 /**
- * Loading indicator component
+ * 加载指示器组件
  */
 function Loader({ progress }) {
   return (
     <Html center>
       <div className="virtual-tryon-loader">
         <div className="loader-spinner"></div>
-        <p>Loading 3D Model... {Math.round(progress)}%</p>
+        <p>正在加载3D模型... {Math.round(progress)}%</p>
       </div>
     </Html>
   );
@@ -28,16 +28,16 @@ function ProgressBar() {
 }
 
 /**
- * VirtualTryOn Main Component
- * Container component that integrates all virtual try-on functionality
+ * 虚拟换衣主组件
+ * 集成所有虚拟换衣功能
  * 
  * @param {Object} props
- * @param {string} props.humanModelUrl - URL to human GLB model
- * @param {Array} props.presetClothing - Array of preset clothing options
- * @param {Object} props.defaultPhysics - Default physics configuration
- * @param {boolean} props.showControls - Whether to show control panel
- * @param {Function} props.onClothingChange - Callback when clothing changes
- * @param {Function} props.onPhysicsChange - Callback when physics changes
+ * @param {string} props.humanModelUrl - 人体模型URL
+ * @param {Array} props.presetClothing - 预设服装列表
+ * @param {Object} props.defaultPhysics - 默认物理配置
+ * @param {boolean} props.showControls - 是否显示控制面板
+ * @param {Function} props.onClothingChange - 服装变化回调
+ * @param {Function} props.onPhysicsChange - 物理配置变化回调
  */
 export function VirtualTryOn({
   humanModelUrl = '/models/human/default.glb',
@@ -52,7 +52,7 @@ export function VirtualTryOn({
   onClothingChange,
   onPhysicsChange
 }) {
-  // State
+  // 状态
   const [humanModel, setHumanModel] = useState(null);
   const [clothingUrl, setClothingUrl] = useState(null);
   const [clothingModel, setClothingModel] = useState(null);
@@ -69,39 +69,39 @@ export function VirtualTryOn({
   // Refs
   const canvasRef = useRef();
   
-  // Handle human model load
+  // 处理人体模型加载
   const handleHumanModelLoad = useCallback((model) => {
     setHumanModel(model);
     setIsLoading(false);
   }, []);
   
-  // Handle human model error
+  // 处理人体模型加载错误
   const handleHumanModelError = useCallback((err) => {
-    console.error('Failed to load human model:', err);
-    setError(err.message || 'Failed to load human model');
+    console.error('加载人体模型失败:', err);
+    setError(err.message || '加载人体模型失败');
     setIsLoading(false);
   }, []);
   
-  // Handle clothing upload
+  // 处理服装上传
   const handleClothingUpload = useCallback((file) => {
     if (!file) return;
     
-    // Validate file type
+    // 验证文件类型
     if (!file.name.match(/\.(glb|gltf)$/i)) {
-      setError('Please upload a GLB or GLTF file');
+      setError('请上传 GLB 或 GLTF 文件');
       return;
     }
     
-    // Validate file size (10MB limit)
+    // 验证文件大小 (10MB限制)
     if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB');
+      setError('文件大小必须小于 10MB');
       return;
     }
     
     setIsLoading(true);
     setError(null);
     
-    // Create blob URL for local file
+    // 创建本地文件的 blob URL
     const url = URL.createObjectURL(file);
     setClothingUrl(url);
     
@@ -110,7 +110,7 @@ export function VirtualTryOn({
     }
   }, [onClothingChange]);
   
-  // Handle preset clothing selection
+  // 处理预设服装选择
   const handlePresetSelect = useCallback((preset) => {
     setIsLoading(true);
     setError(null);
@@ -121,12 +121,12 @@ export function VirtualTryOn({
     }
   }, [onClothingChange]);
   
-  // Handle adjustment changes
+  // 处理调整变化
   const handleAdjustmentChange = useCallback((newAdjustment) => {
     setAdjustment(newAdjustment);
   }, []);
   
-  // Handle physics config changes
+  // 处理物理配置变化
   const handlePhysicsChange = useCallback((newConfig) => {
     setPhysicsConfig(newConfig);
     if (onPhysicsChange) {
@@ -134,7 +134,7 @@ export function VirtualTryOn({
     }
   }, [onPhysicsChange]);
   
-  // Handle clothing removal
+  // 处理服装移除
   const handleRemoveClothing = useCallback(() => {
     setClothingUrl(null);
     setClothingModel(null);
@@ -144,12 +144,12 @@ export function VirtualTryOn({
     }
   }, [onClothingChange]);
   
-  // Clear error
+  // 清除错误
   const handleClearError = useCallback(() => {
     setError(null);
   }, []);
   
-  // Cleanup blob URL on unmount
+  // 组件卸载时清理 blob URL
   useEffect(() => {
     return () => {
       if (clothingUrl && clothingUrl.startsWith('blob:')) {
@@ -160,7 +160,7 @@ export function VirtualTryOn({
   
   return (
     <div className="virtual-tryon-container">
-      {/* 3D Canvas */}
+      {/* 3D 画布 */}
       <div className="virtual-tryon-canvas" ref={canvasRef}>
         <Canvas
           shadows
@@ -173,7 +173,7 @@ export function VirtualTryOn({
         >
           <color attach="background" args={['#f0f0f0']} />
           
-          {/* Lighting */}
+          {/* 灯光 */}
           <ambientLight intensity={0.5} />
           <directionalLight
             position={[5, 5, 5]}
@@ -183,14 +183,14 @@ export function VirtualTryOn({
           />
           <directionalLight position={[-5, 5, -5]} intensity={0.5} />
           
-          {/* Environment */}
+          {/* 环境 */}
           <Environment preset="city" />
           
-          {/* Loading Progress */}
+          {/* 加载进度 */}
           <ProgressBar />
           
           <Suspense fallback={null}>
-            {/* Human Model - use geometric if no GLB available */}
+            {/* 人体模型 - 如果没有GLB则使用几何体 */}
             {humanModelUrl ? (
               <HumanModel
                 modelUrl={humanModelUrl}
@@ -201,7 +201,7 @@ export function VirtualTryOn({
               <GeometricHumanModel scale={1} />
             )}
             
-            {/* Clothing Overlay */}
+            {/* 服装叠加 */}
             {clothingUrl && (
               <ClothingOverlay
                 clothingUrl={clothingUrl}
@@ -209,12 +209,12 @@ export function VirtualTryOn({
                 adjustment={adjustment}
                 physicsConfig={showPhysics ? physicsConfig : null}
                 onLoad={setClothingModel}
-                onError={(err) => setError(err?.message || 'Failed to load clothing')}
+                onError={(err) => setError(err?.message || '加载服装失败')}
               />
             )}
           </Suspense>
           
-          {/* Ground Shadow */}
+          {/* 地面阴影 */}
           <ContactShadows
             position={[0, -0.01, 0]}
             opacity={0.4}
@@ -223,7 +223,7 @@ export function VirtualTryOn({
             far={4}
           />
           
-          {/* Controls */}
+          {/* 控制 */}
           <OrbitControls
             enablePan={true}
             enableZoom={true}
@@ -236,10 +236,10 @@ export function VirtualTryOn({
         </Canvas>
       </div>
       
-      {/* Control Panel */}
+      {/* 控制面板 */}
       {showControls && (
         <ClothingControls
-          clothing={clothingModel ? { url: clothingUrl, name: 'Current Clothing' } : null}
+          clothing={clothingModel ? { url: clothingUrl, name: '当前服装' } : null}
           adjustment={adjustment}
           physicsConfig={physicsConfig}
           showPhysics={showPhysics}
@@ -253,11 +253,11 @@ export function VirtualTryOn({
         />
       )}
       
-      {/* Error Display */}
+      {/* 错误提示 */}
       {error && (
         <div className="virtual-tryon-error">
           <span>{error}</span>
-          <button onClick={handleClearError}>Dismiss</button>
+          <button onClick={handleClearError}>关闭</button>
         </div>
       )}
     </div>

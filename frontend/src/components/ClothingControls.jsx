@@ -2,8 +2,8 @@ import { useState, useCallback } from 'react';
 import './ClothingControls.css';
 
 /**
- * ClothingControls Component
- * UI panel for controlling clothing position, rotation, scale, and physics
+ * 服装控制面板组件
+ * 用于控制服装位置、旋转、缩放和物理效果
  */
 export function ClothingControls({
   clothing,
@@ -20,7 +20,7 @@ export function ClothingControls({
 }) {
   const [activeTab, setActiveTab] = useState('position');
   
-  // Handle file input change
+  // 处理文件输入变化
   const handleFileChange = useCallback((e) => {
     const file = e.target.files?.[0];
     if (file && onUpload) {
@@ -28,7 +28,7 @@ export function ClothingControls({
     }
   }, [onUpload]);
   
-  // Handle slider changes
+  // 处理滑块变化
   const handleSliderChange = useCallback((key, axis, value) => {
     const numValue = parseFloat(value);
     
@@ -48,7 +48,7 @@ export function ClothingControls({
     }
   }, [adjustment, physicsConfig, onAdjustmentChange, onPhysicsChange]);
   
-  // Handle physics vector slider
+  // 处理物理向量滑块
   const handleVectorSlider = useCallback((axis, value) => {
     const numValue = parseFloat(value);
     onPhysicsChange({
@@ -62,45 +62,45 @@ export function ClothingControls({
   
   return (
     <div className="clothing-controls">
-      {/* Tab Navigation */}
+      {/* Tab 导航 */}
       <div className="controls-tabs">
         <button 
           className={activeTab === 'position' ? 'active' : ''}
           onClick={() => setActiveTab('position')}
         >
-          Position
+          位置
         </button>
         <button 
           className={activeTab === 'rotation' ? 'active' : ''}
           onClick={() => setActiveTab('rotation')}
         >
-          Rotation
+          旋转
         </button>
         <button 
           className={activeTab === 'scale' ? 'active' : ''}
           onClick={() => setActiveTab('scale')}
         >
-          Scale
+          大小
         </button>
         {showPhysics && (
           <button 
             className={activeTab === 'physics' ? 'active' : ''}
             onClick={() => setActiveTab('physics')}
           >
-            Physics
+            物理效果
           </button>
         )}
       </div>
       
-      {/* Tab Content */}
+      {/* Tab 内容 */}
       <div className="controls-content">
-        {/* Position Tab */}
+        {/* 位置 Tab */}
         {activeTab === 'position' && (
           <div className="control-group">
-            <h4>Position Offset</h4>
+            <h4>位置偏移</h4>
             
             <div className="slider-control">
-              <label>X Axis</label>
+              <label>X轴 (左右)</label>
               <input
                 type="range"
                 min="-1"
@@ -113,7 +113,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Y Axis (Height)</label>
+              <label>Y轴 (上下)</label>
               <input
                 type="range"
                 min="-1"
@@ -126,7 +126,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Z Axis (Depth)</label>
+              <label>Z轴 (前后)</label>
               <input
                 type="range"
                 min="-1"
@@ -140,13 +140,13 @@ export function ClothingControls({
           </div>
         )}
         
-        {/* Rotation Tab */}
+        {/* 旋转 Tab */}
         {activeTab === 'rotation' && (
           <div className="control-group">
-            <h4>Rotation Offset</h4>
+            <h4>旋转角度</h4>
             
             <div className="slider-control">
-              <label>X (Pitch)</label>
+              <label>X轴 (俯仰)</label>
               <input
                 type="range"
                 min="-180"
@@ -159,7 +159,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Y (Yaw)</label>
+              <label>Y轴 (水平)</label>
               <input
                 type="range"
                 min="-180"
@@ -172,7 +172,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Z (Roll)</label>
+              <label>Z轴 (倾斜)</label>
               <input
                 type="range"
                 min="-180"
@@ -186,13 +186,13 @@ export function ClothingControls({
           </div>
         )}
         
-        {/* Scale Tab */}
+        {/* 缩放 Tab */}
         {activeTab === 'scale' && (
           <div className="control-group">
-            <h4>Scale</h4>
+            <h4>服装大小</h4>
             
             <div className="slider-control">
-              <label>Size</label>
+              <label>缩放比例</label>
               <input
                 type="range"
                 min="0.1"
@@ -206,13 +206,13 @@ export function ClothingControls({
           </div>
         )}
         
-        {/* Physics Tab */}
+        {/* 物理效果 Tab */}
         {activeTab === 'physics' && (
           <div className="control-group">
-            <h4>Cloth Physics</h4>
+            <h4>布料物理效果</h4>
             
             <div className="slider-control">
-              <label>Stiffness</label>
+              <label>硬度</label>
               <input
                 type="range"
                 min="0"
@@ -225,7 +225,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Dampening</label>
+              <label>阻尼</label>
               <input
                 type="range"
                 min="0"
@@ -238,7 +238,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Wind X</label>
+              <label>风力 X</label>
               <input
                 type="range"
                 min="-5"
@@ -254,7 +254,7 @@ export function ClothingControls({
             </div>
             
             <div className="slider-control">
-              <label>Wind Z</label>
+              <label>风力 Z</label>
               <input
                 type="range"
                 min="-5"
@@ -273,17 +273,17 @@ export function ClothingControls({
               className="physics-toggle"
               onClick={onTogglePhysics}
             >
-              {showPhysics ? 'Disable Physics' : 'Enable Physics'}
+              {showPhysics ? '关闭物理效果' : '开启物理效果'}
             </button>
           </div>
         )}
       </div>
       
-      {/* Upload Section */}
+      {/* 上传区域 */}
       <div className="upload-section">
-        <h4>Clothing</h4>
+        <h4>服装选择</h4>
         
-        {/* File Upload */}
+        {/* 文件上传 */}
         <label className="upload-button">
           <input
             type="file"
@@ -291,10 +291,10 @@ export function ClothingControls({
             onChange={handleFileChange}
             style={{ display: 'none' }}
           />
-          Upload GLB File
+          上传 GLB 文件
         </label>
         
-        {/* Preset Clothing */}
+        {/* 预设服装 */}
         {presets.length > 0 && (
           <div className="preset-grid">
             {presets.map((preset) => (
@@ -314,10 +314,10 @@ export function ClothingControls({
           </div>
         )}
         
-        {/* Remove Button */}
+        {/* 移除按钮 */}
         {clothing && (
           <button className="remove-button" onClick={onRemove}>
-            Remove Clothing
+            移除服装
           </button>
         )}
       </div>
