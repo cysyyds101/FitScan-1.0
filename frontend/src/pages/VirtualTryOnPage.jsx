@@ -1,18 +1,15 @@
 import VirtualTryOn from '../components/VirtualTryOn';
-import { PRESET_CLOTHING, getThumbnailDataUrl } from '../utils/presetClothing';
+import { PRESET_CLOTHING } from '../utils/presetClothing';
 
 /**
  * VirtualTryOnPage
- * Standalone page component for the virtual try-on feature
+ * 虚拟换衣页面 - 展示3D人体模型和预设服装
  */
 export function VirtualTryOnPage() {
-  // Enhance preset clothing with thumbnail data URLs
-  const presetClothing = PRESET_CLOTHING.map(item => ({
-    ...item,
-    thumbnail: getThumbnailDataUrl(item.id) || item.thumbnail
-  }));
+  // 使用预设服装
+  const presetClothing = PRESET_CLOTHING;
   
-  // Default physics configuration
+  // 默认物理配置
   const defaultPhysics = {
     stiffness: 0.3,
     dampening: 0.5,
@@ -20,25 +17,27 @@ export function VirtualTryOnPage() {
     gravity: { x: 0, y: -9.8, z: 0 }
   };
   
-  // Event handlers
+  // 服装变化处理
   const handleClothingChange = (clothing) => {
-    console.log('Clothing changed:', clothing);
+    if (clothing) {
+      console.log('已选择服装:', clothing.name);
+    }
   };
   
+  // 物理配置变化处理
   const handlePhysicsChange = (config) => {
-    console.log('Physics config changed:', config);
+    console.log('物理配置:', config);
   };
   
   return (
     <div className="page virtual-tryon-page">
       <div className="page-header">
         <h1>虚拟换衣</h1>
-        <p>上传您的服装或选择预设服装，查看3D试穿效果</p>
+        <p>选择下方预设服装，查看3D试穿效果</p>
       </div>
       
       <div className="page-content">
         <VirtualTryOn
-          humanModelUrl="/models/human/default.glb"
           presetClothing={presetClothing}
           defaultPhysics={defaultPhysics}
           showControls={true}
@@ -86,6 +85,17 @@ export function VirtualTryOnPage() {
         
         .virtual-tryon-page .clothing-controls {
           background: white;
+        }
+        
+        /* 提示文字 */
+        .virtual-tryon-hint {
+          text-align: center;
+          color: #888;
+          font-size: 12px;
+          padding: 8px 16px;
+          background: #f5f5f5;
+          border-radius: 8px;
+          margin-top: 12px;
         }
       `}</style>
     </div>
