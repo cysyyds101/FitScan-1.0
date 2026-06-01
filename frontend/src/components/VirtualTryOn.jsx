@@ -209,7 +209,7 @@ export function VirtualTryOn({
                 adjustment={adjustment}
                 physicsConfig={showPhysics ? physicsConfig : null}
                 onLoad={setClothingModel}
-                onError={setError}
+                onError={(err) => setError(err?.message || 'Failed to load clothing')}
               />
             )}
           </Suspense>
