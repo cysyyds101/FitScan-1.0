@@ -6,11 +6,11 @@ import './ClothingControls.css';
  * 用于控制服装位置、旋转、缩放和物理效果
  */
 export function ClothingControls({
-  clothing,
   adjustment,
   physicsConfig,
   showPhysics,
   presets = [],
+  clothing,
   onUpload,
   onPresetSelect,
   onRemove,
@@ -28,37 +28,38 @@ export function ClothingControls({
     }
   }, [onUpload]);
   
-  // 处理滑块变化
-  const handleSliderChange = useCallback((key, axis, value) => {
+  // 处理位置滑块变化
+  const handlePositionChange = useCallback((axis, value) => {
     const numValue = parseFloat(value);
-    
-    if (key === 'adjustment') {
-      onAdjustmentChange({
-        ...adjustment,
-        [axis === 'scale' ? 'scale' : `${axis}Offset`]: 
-          axis === 'scale' 
-            ? numValue 
-            : { ...adjustment[`${axis}Offset`], [key]: numValue }
-      });
-    } else if (key === 'physics') {
-      onPhysicsChange({
-        ...physicsConfig,
+    onAdjustmentChange({
+      ...adjustment,
+      positionOffset: {
+        ...adjustment.positionOffset,
         [axis]: numValue
-      });
-    }
-  }, [adjustment, physicsConfig, onAdjustmentChange, onPhysicsChange]);
-  
-  // 处理物理向量滑块
-  const handleVectorSlider = useCallback((axis, value) => {
-    const numValue = parseFloat(value);
-    onPhysicsChange({
-      ...physicsConfig,
-      wind: { ...physicsConfig.wind, [axis]: numValue },
-      gravity: axis === 'y' 
-        ? { ...physicsConfig.gravity, y: physicsConfig.gravity.y + numValue * 0.1 - physicsConfig.gravity.y }
-        : physicsConfig.gravity
+      }
     });
-  }, [physicsConfig, onPhysicsChange]);
+  }, [adjustment, onAdjustmentChange]);
+  
+  // 处理旋转滑块变化
+  const handleRotationChange = useCallback((axis, value) => {
+    const numValue = parseFloat(value);
+    onAdjustmentChange({
+      ...adjustment,
+      rotationOffset: {
+        ...adjustment.rotationOffset,
+        [axis]: numValue
+      }
+    });
+  }, [adjustment, onAdjustmentChange]);
+  
+  // 处理缩放滑块变化
+  const handleScaleChange = useCallback((value) => {
+    const numValue = parseFloat(value);
+    onAdjustmentChange({
+      ...adjustment,
+      scale: numValue
+    });
+  }, [adjustment, onAdjustmentChange]);
   
   return (
     <div className="clothing-controls">
@@ -106,10 +107,10 @@ export function ClothingControls({
                 min="-1"
                 max="1"
                 step="0.01"
-                value={adjustment?.positionOffset?.x || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'positionX', e.target.value)}
+                value={adjustment?.positionOffset?.x ?? 0}
+                onChange={(e) => handlePositionChange('x', e.target.value)}
               />
-              <span>{(adjustment?.positionOffset?.x || 0).toFixed(2)}</span>
+              <span>{(adjustment?.positionOffset?.x ?? 0).toFixed(2)}</span>
             </div>
             
             <div className="slider-control">
@@ -119,10 +120,10 @@ export function ClothingControls({
                 min="-1"
                 max="1"
                 step="0.01"
-                value={adjustment?.positionOffset?.y || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'positionY', e.target.value)}
+                value={adjustment?.positionOffset?.y ?? 0}
+                onChange={(e) => handlePositionChange('y', e.target.value)}
               />
-              <span>{(adjustment?.positionOffset?.y || 0).toFixed(2)}</span>
+              <span>{(adjustment?.positionOffset?.y ?? 0).toFixed(2)}</span>
             </div>
             
             <div className="slider-control">
@@ -132,10 +133,10 @@ export function ClothingControls({
                 min="-1"
                 max="1"
                 step="0.01"
-                value={adjustment?.positionOffset?.z || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'positionZ', e.target.value)}
+                value={adjustment?.positionOffset?.z ?? 0}
+                onChange={(e) => handlePositionChange('z', e.target.value)}
               />
-              <span>{(adjustment?.positionOffset?.z || 0).toFixed(2)}</span>
+              <span>{(adjustment?.positionOffset?.z ?? 0).toFixed(2)}</span>
             </div>
           </div>
         )}
@@ -152,10 +153,10 @@ export function ClothingControls({
                 min="-180"
                 max="180"
                 step="1"
-                value={adjustment?.rotationOffset?.x || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'rotationX', e.target.value)}
+                value={adjustment?.rotationOffset?.x ?? 0}
+                onChange={(e) => handleRotationChange('x', e.target.value)}
               />
-              <span>{(adjustment?.rotationOffset?.x || 0)}°</span>
+              <span>{(adjustment?.rotationOffset?.x ?? 0)}°</span>
             </div>
             
             <div className="slider-control">
@@ -165,10 +166,10 @@ export function ClothingControls({
                 min="-180"
                 max="180"
                 step="1"
-                value={adjustment?.rotationOffset?.y || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'rotationY', e.target.value)}
+                value={adjustment?.rotationOffset?.y ?? 0}
+                onChange={(e) => handleRotationChange('y', e.target.value)}
               />
-              <span>{(adjustment?.rotationOffset?.y || 0)}°</span>
+              <span>{(adjustment?.rotationOffset?.y ?? 0)}°</span>
             </div>
             
             <div className="slider-control">
@@ -178,10 +179,10 @@ export function ClothingControls({
                 min="-180"
                 max="180"
                 step="1"
-                value={adjustment?.rotationOffset?.z || 0}
-                onChange={(e) => handleSliderChange('adjustment', 'rotationZ', e.target.value)}
+                value={adjustment?.rotationOffset?.z ?? 0}
+                onChange={(e) => handleRotationChange('z', e.target.value)}
               />
-              <span>{(adjustment?.rotationOffset?.z || 0)}°</span>
+              <span>{(adjustment?.rotationOffset?.z ?? 0)}°</span>
             </div>
           </div>
         )}
@@ -198,10 +199,10 @@ export function ClothingControls({
                 min="0.1"
                 max="3"
                 step="0.01"
-                value={adjustment?.scale || 1}
-                onChange={(e) => handleSliderChange('adjustment', 'scale', e.target.value)}
+                value={adjustment?.scale ?? 1}
+                onChange={(e) => handleScaleChange(e.target.value)}
               />
-              <span>{(adjustment?.scale || 1).toFixed(2)}x</span>
+              <span>{(adjustment?.scale ?? 1).toFixed(2)}x</span>
             </div>
           </div>
         )}
@@ -218,10 +219,10 @@ export function ClothingControls({
                 min="0"
                 max="1"
                 step="0.01"
-                value={physicsConfig?.stiffness || 0.3}
+                value={physicsConfig?.stiffness ?? 0.3}
                 onChange={(e) => onPhysicsChange({ ...physicsConfig, stiffness: parseFloat(e.target.value) })}
               />
-              <span>{(physicsConfig?.stiffness || 0.3).toFixed(2)}</span>
+              <span>{(physicsConfig?.stiffness ?? 0.3).toFixed(2)}</span>
             </div>
             
             <div className="slider-control">
@@ -231,10 +232,10 @@ export function ClothingControls({
                 min="0"
                 max="1"
                 step="0.01"
-                value={physicsConfig?.dampening || 0.5}
+                value={physicsConfig?.dampening ?? 0.5}
                 onChange={(e) => onPhysicsChange({ ...physicsConfig, dampening: parseFloat(e.target.value) })}
               />
-              <span>{(physicsConfig?.dampening || 0.5).toFixed(2)}</span>
+              <span>{(physicsConfig?.dampening ?? 0.5).toFixed(2)}</span>
             </div>
             
             <div className="slider-control">
@@ -244,13 +245,13 @@ export function ClothingControls({
                 min="-5"
                 max="5"
                 step="0.1"
-                value={physicsConfig?.wind?.x || 0}
+                value={physicsConfig?.wind?.x ?? 0}
                 onChange={(e) => onPhysicsChange({ 
                   ...physicsConfig, 
                   wind: { ...physicsConfig.wind, x: parseFloat(e.target.value) }
                 })}
               />
-              <span>{(physicsConfig?.wind?.x || 0).toFixed(1)}</span>
+              <span>{(physicsConfig?.wind?.x ?? 0).toFixed(1)}</span>
             </div>
             
             <div className="slider-control">
@@ -260,13 +261,13 @@ export function ClothingControls({
                 min="-5"
                 max="5"
                 step="0.1"
-                value={physicsConfig?.wind?.z || 1}
+                value={physicsConfig?.wind?.z ?? 1}
                 onChange={(e) => onPhysicsChange({ 
                   ...physicsConfig, 
                   wind: { ...physicsConfig.wind, z: parseFloat(e.target.value) }
                 })}
               />
-              <span>{(physicsConfig?.wind?.z || 1).toFixed(1)}</span>
+              <span>{(physicsConfig?.wind?.z ?? 1).toFixed(1)}</span>
             </div>
             
             <button 
@@ -307,7 +308,9 @@ export function ClothingControls({
                 {preset.thumbnail ? (
                   <img src={preset.thumbnail} alt={preset.name} />
                 ) : (
-                  <span>{preset.name.charAt(0)}</span>
+                  <span style={{ backgroundColor: preset.color, color: 'white', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
+                    {preset.name.charAt(0)}
+                  </span>
                 )}
               </button>
             ))}
