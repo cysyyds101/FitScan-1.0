@@ -1,0 +1,170 @@
+# Implementation Plan: FastAPI 3D 人体测量数据服务
+
+**Branch**: `faster-3d-body-measurement-api` | **Date**: 2026-05-26 | **Spec**: [.specify/specs/faster-3d-body-measurement-api/spec.md](spec.md)
+
+**Input**: Feature specification from Clarify phase decisions
+
+## Summary
+
+构建基于FastAPI的3D人体测量数据后端服务，核心功能包括：
+- 通过WebSocket接收实时摄像头数据流（非阻塞设计）
+- 通过REST API提供离线文件上传和测量结果查询
+- 采用Protobuf/MessagePack二进制协议优化传输效率
+- 3D计算与消息循环完全隔离，保护实时流稳定性
+- 符合GDPR隐私合规要求，实现生物特征数据保护
+
+## Technical Context
+
+| 维度 | 决策 |
+|------|------|
+| **Language/Version** | Python 3.11+ |
+| **Primary Dependencies** | FastAPI, Uvicorn, WebSockets, Celery/ARQ, InfluxDB-client, MinIO, OpenTelemetry, Protobuf |
+| **Storage** | InfluxDB (时序数据) + MinIO/S3 (文件存储) |
+| **Testing** | pytest, pytest-asyncio, pytest-cov |
+| **Target Platform** | Linux Server (Docker/Kubernetes) |
+| **Project Type** | Backend API Service (Web Service) |
+| **Performance Goals** | 实时流 < 100ms P99，离线计算 < 30s P95 |
+| **Constraints** | 非阻塞设计，Tail Sampling，GDPR合规 |
+| **Scale/Scope** | 100+ 并发WebSocket连接 |
+
+## Constitution Check
+
+*GATE: Must pass before Phase 0 research.*
+
+| 原则 | 状态 | 说明 |
+|------|------|------|
+| 测试优先 | ✓ PASS | 规范包含独立可测试的用户故事 |
+| 清晰架构 | ✓ PASS | 分层架构已定义（接入/计算/存储） |
+| 安全合规 | ✓ PASS | GDPR和隐私脱敏已纳入需求 |
+| 可观测性 | ✓ PASS | 全链路追踪+Tail Sampling已定义 |
+| 性能目标 | ✓ PASS | 明确SLA指标（P99/P95延迟） |
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+.specify/specs/faster-3d-body-measurement-api/
+├── spec.md              # Feature specification
+├── plan.md              # This file
+├── research.md          # Phase 0 output (technology research)
+├── data-model.md        # Phase 1 output (data entities)
+├── contracts/           # Phase 1 output (API contracts)
+│   ├── websocket.md     # WebSocket protocol spec
+│   └── rest-api.md      # REST API spec
+└── quickstart.md        # Phase 1 output (developer guide)
+```
+
+### Source Code (repository root)
+
+```text
+FitScan/
+├── backend/
+│   ├── src/
+│   │   ├── __init__.py
+│   │   ├── main.py              # FastAPI application
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── routes/
+│   │   │   │   ├── measurements.py   # Measurement endpoints
+│   │   │   │   ├── upload.py        # File upload endpoints
+│   │   │   │   └── health.py        # Health check
+│   │   │   └── deps.py              # Dependencies injection
+│   │   ├── websocket/
+│   │   │   ├── __init__.py
+│   │   │   ├── manager.py           # Connection manager
+│   │   │   ├── handler.py           # Message handlers
+│   │   │   └── protocol.py          # Binary protocol impl
+│   │   ├── worker/
+│   │   │   ├── __init__.py
+│   │   │   ├── tasks.py             # Celery/ARQ tasks
+│   │   │   └── processor.py         # 3D processing logic
+│   │   ├── storage/
+│   │   │   ├── __init__.py
+│   │   │   ├── influxdb.py          # Time-series client
+│   │   │   └── minio.py             # Object storage client
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── measurement.py       # Pydantic models
+│   │   │   ├── session.py
+│   │   │   └── user.py
+│   │   ├── security/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py              # JWT/API Key auth
+│   │   │   └── privacy.py           # Data anonymization
+│   │   └── observability/
+│   │       ├── __init__.py
+│   │       ├── tracing.py            # OpenTelemetry setup
+│   │       └── metrics.py           # Prometheus metrics
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── unit/
+│   │   ├── integration/
+│   │   └── contract/
+│   ├── protos/
+│   │   └── measurement.proto        # Protobuf definitions
+│   ├── requirements.txt
+│   └── Dockerfile
+├── nginx/
+│   └── conf.d/
+│       └── api.conf                 # Nginx config with rate limiting
+└── docker-compose.yml
+```
+
+**Structure Decision**: Web应用结构，采用backend目录组织Python FastAPI服务，包含完整的分层架构（API/Worker/Storage/Models/Security/Observability）
+
+## Complexity Tracking
+
+| 方面 | 决策 | 理由 |
+|------|------|------|
+| 任务队列 | Celery + Redis | 成熟的分布式任务队列，支持重试和监控 |
+| 时序数据库 | InfluxDB | 专为测量时序数据优化，高写入性能 |
+| 二进制协议 | Protobuf | 跨语言支持强，类型安全，序列化效率高 |
+| 全链路追踪 | OpenTelemetry | 行业标准，供应商无关 |
+
+## Phases
+
+### Phase 0: Research & Technology Validation
+
+- [ ] 验证 FastAPI + Uvicorn + WebSocket 非阻塞模型
+- [ ] 研究 Celery/ARQ 在 ProcessPoolExecutor 中保持 Trace ID 的方法
+- [ ] 评估 Protobuf/MessagePack 在 3D 数据序列化上的性能差异
+- [ ] 设计 Tail-based Sampling 实现方案
+- [ ] 研究 InfluxDB + MinIO 在 Docker/K8s 环境的部署
+
+### Phase 1: Core Infrastructure
+
+- [ ] 项目脚手架搭建（目录结构、依赖管理）
+- [ ] Protobuf 定义文件创建
+- [ ] 数据模型（Pydantic）定义
+- [ ] Docker Compose 环境配置
+- [ ] OpenTelemetry 追踪配置
+
+### Phase 2: API Layer
+
+- [ ] REST API 端点实现
+- [ ] WebSocket Manager（连接管理）
+- [ ] 文件上传处理（Nginx + FastAPI）
+- [ ] API 认证与授权
+
+### Phase 3: Processing Layer
+
+- [ ] 任务队列集成
+- [ ] 3D 计算任务隔离实现
+- [ ] 超时与重试机制
+
+### Phase 4: Storage Layer
+
+- [ ] InfluxDB 集成
+- [ ] MinIO/S3 集成
+- [ ] 数据脱敏处理
+
+### Phase 5: Observability & Security
+
+- [ ] Tail-based Sampling 实现
+- [ ] GDPR 合规审计
+- [ ] 安全加固
+
+---
+
+*Plan generated by /speckit-plan - Phase 2 planning stops here*
