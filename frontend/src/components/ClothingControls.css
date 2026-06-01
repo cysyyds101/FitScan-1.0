@@ -46,13 +46,51 @@
   flex: 1;
 }
 
+.control-group {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 .control-group h4 {
-  margin: 0 0 16px 0;
+  margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: #333;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* 重置按钮 */
+.reset-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e0e0e0;
+  border-radius: 50%;
+  background: white;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.reset-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+  border-color: #ccc;
 }
 
 /* 滑块控制 */
@@ -108,6 +146,16 @@
   text-align: right;
 }
 
+/* 物理效果提示 */
+.physics-hint {
+  font-size: 11px;
+  color: #999;
+  margin: -8px 0 16px 0;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
 /* 物理效果开关 */
 .physics-toggle {
   width: 100%;
@@ -141,30 +189,20 @@
   color: #333;
 }
 
-.upload-button {
-  display: block;
-  width: 100%;
-  padding: 10px;
-  background: white;
-  border: 2px dashed #ccc;
-  border-radius: 6px;
-  color: #666;
-  font-size: 13px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.upload-button:hover {
-  border-color: #4a90d9;
+/* 当前服装名称 */
+.current-clothing {
+  margin: 12px 0 8px 0;
+  font-size: 14px;
   color: #4a90d9;
+  font-weight: 500;
+  text-align: center;
 }
 
 /* 预设服装网格 */
 .preset-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
   margin-top: 12px;
 }
 
@@ -172,46 +210,51 @@
   aspect-ratio: 1;
   background: white;
   border: 2px solid #e0e0e0;
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 8px;
 }
 
 .preset-item:hover {
   border-color: #4a90d9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.2);
 }
 
 .preset-item.active {
   border-color: #4a90d9;
   background: #e3f2fd;
+  box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
 }
 
-.preset-item img {
+.preset-color {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-.preset-item span {
-  font-size: 16px;
-  font-weight: 600;
-  color: #4a90d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  border-radius: 8px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 /* 移除按钮 */
 .remove-button {
   width: 100%;
-  padding: 8px;
+  padding: 10px;
   margin-top: 12px;
   background: #ff5252;
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.2s;
 }

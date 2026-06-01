@@ -16,7 +16,8 @@ export function ClothingControls({
   onRemove,
   onAdjustmentChange,
   onPhysicsChange,
-  onTogglePhysics
+  onTogglePhysics,
+  onReset
 }) {
   const [activeTab, setActiveTab] = useState('position');
   
@@ -61,6 +62,13 @@ export function ClothingControls({
     });
   }, [adjustment, onAdjustmentChange]);
   
+  // 处理重置
+  const handleReset = useCallback(() => {
+    if (onReset) {
+      onReset();
+    }
+  }, [onReset]);
+  
   return (
     <div className="clothing-controls">
       {/* Tab 导航 */}
@@ -88,7 +96,7 @@ export function ClothingControls({
             className={activeTab === 'physics' ? 'active' : ''}
             onClick={() => setActiveTab('physics')}
           >
-            物理效果
+            物理
           </button>
         )}
       </div>
@@ -98,14 +106,17 @@ export function ClothingControls({
         {/* 位置 Tab */}
         {activeTab === 'position' && (
           <div className="control-group">
-            <h4>位置偏移</h4>
+            <div className="control-header">
+              <h4>位置偏移</h4>
+              <button className="reset-btn" onClick={handleReset} title="重置">↺</button>
+            </div>
             
             <div className="slider-control">
               <label>X轴 (左右)</label>
               <input
                 type="range"
-                min="-1"
-                max="1"
+                min="-0.5"
+                max="0.5"
                 step="0.01"
                 value={adjustment?.positionOffset?.x ?? 0}
                 onChange={(e) => handlePositionChange('x', e.target.value)}
@@ -117,8 +128,8 @@ export function ClothingControls({
               <label>Y轴 (上下)</label>
               <input
                 type="range"
-                min="-1"
-                max="1"
+                min="-0.5"
+                max="0.5"
                 step="0.01"
                 value={adjustment?.positionOffset?.y ?? 0}
                 onChange={(e) => handlePositionChange('y', e.target.value)}
@@ -130,8 +141,8 @@ export function ClothingControls({
               <label>Z轴 (前后)</label>
               <input
                 type="range"
-                min="-1"
-                max="1"
+                min="-0.5"
+                max="0.5"
                 step="0.01"
                 value={adjustment?.positionOffset?.z ?? 0}
                 onChange={(e) => handlePositionChange('z', e.target.value)}
@@ -144,14 +155,17 @@ export function ClothingControls({
         {/* 旋转 Tab */}
         {activeTab === 'rotation' && (
           <div className="control-group">
-            <h4>旋转角度</h4>
+            <div className="control-header">
+              <h4>旋转角度</h4>
+              <button className="reset-btn" onClick={handleReset} title="重置">↺</button>
+            </div>
             
             <div className="slider-control">
               <label>X轴 (俯仰)</label>
               <input
                 type="range"
-                min="-180"
-                max="180"
+                min="-90"
+                max="90"
                 step="1"
                 value={adjustment?.rotationOffset?.x ?? 0}
                 onChange={(e) => handleRotationChange('x', e.target.value)}
@@ -176,8 +190,8 @@ export function ClothingControls({
               <label>Z轴 (倾斜)</label>
               <input
                 type="range"
-                min="-180"
-                max="180"
+                min="-90"
+                max="90"
                 step="1"
                 value={adjustment?.rotationOffset?.z ?? 0}
                 onChange={(e) => handleRotationChange('z', e.target.value)}
@@ -190,14 +204,17 @@ export function ClothingControls({
         {/* 缩放 Tab */}
         {activeTab === 'scale' && (
           <div className="control-group">
-            <h4>服装大小</h4>
+            <div className="control-header">
+              <h4>服装大小</h4>
+              <button className="reset-btn" onClick={handleReset} title="重置">↺</button>
+            </div>
             
             <div className="slider-control">
               <label>缩放比例</label>
               <input
                 type="range"
-                min="0.1"
-                max="3"
+                min="0.5"
+                max="2"
                 step="0.01"
                 value={adjustment?.scale ?? 1}
                 onChange={(e) => handleScaleChange(e.target.value)}
@@ -211,6 +228,7 @@ export function ClothingControls({
         {activeTab === 'physics' && (
           <div className="control-group">
             <h4>布料物理效果</h4>
+            <p className="physics-hint">布料物理需要浏览器支持 WebGPU</p>
             
             <div className="slider-control">
               <label>硬度</label>
@@ -282,18 +300,7 @@ export function ClothingControls({
       
       {/* 上传区域 */}
       <div className="upload-section">
-        <h4>服装选择</h4>
-        
-        {/* 文件上传 */}
-        <label className="upload-button">
-          <input
-            type="file"
-            accept=".glb,.gltf"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
-          上传 GLB 文件
-        </label>
+        <h4>选择服装</h4>
         
         {/* 预设服装 */}
         {presets.length > 0 && (
@@ -301,20 +308,24 @@ export function ClothingControls({
             {presets.map((preset) => (
               <button
                 key={preset.id}
-                className={`preset-item ${clothing?.name === preset.name ? 'active' : ''}`}
+                className={`preset-item ${clothing?.id === preset.id ? 'active' : ''}`}
                 onClick={() => onPresetSelect(preset)}
                 title={preset.name}
               >
-                {preset.thumbnail ? (
-                  <img src={preset.thumbnail} alt={preset.name} />
-                ) : (
-                  <span style={{ backgroundColor: preset.color, color: 'white', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
-                    {preset.name.charAt(0)}
-                  </span>
-                )}
+                <span 
+                  className="preset-color"
+                  style={{ backgroundColor: preset.color }}
+                >
+                  {preset.name.charAt(0)}
+                </span>
               </button>
             ))}
           </div>
+        )}
+        
+        {/* 当前服装名称 */}
+        {clothing && (
+          <p className="current-clothing">{clothing.name}</p>
         )}
         
         {/* 移除按钮 */}
