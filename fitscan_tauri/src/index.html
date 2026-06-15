@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>FitScan Desktop</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="title-bar" id="title-bar">
+    <div class="title">FitScan Desktop</div>
+    <div class="window-controls">
+      <button class="btn" id="minimize">—</button>
+      <button class="btn" id="close">✕</button>
+    </div>
+  </div>
+  <div class="content">
+    <h1>离线身高尺码识别</h1>
+    <p>上传全身正面照片（或使用摄像头）：</p>
+    <input type="file" id="fileInput" accept="image/*" />
+    <br/><br/>
+    <button id="processBtn">开始识别</button>
+    <div id="status"></div>
+    <h2>结果</h2>
+    <pre id="result"></pre>
+    <div id="debug" style="display:none; margin-top:10px;">
+      <canvas id="canvas" width="192" height="192"></canvas>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

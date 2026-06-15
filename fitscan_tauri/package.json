@@ -1,0 +1,14 @@
+{
+  "name": "fitscan-tauri",
+  "version": "0.1.0",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0",
+    "@tauri-apps/cli": "^1.6.0",
+    "@tensorflow/tfjs": "^4.17.0"
+  }
+}

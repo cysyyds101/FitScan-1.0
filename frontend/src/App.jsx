@@ -4,8 +4,6 @@ import HomePage from './pages/HomePage'
 import MeasurementPage from './pages/MeasurementPage'
 import ResultPage from './pages/ResultPage'
 import HistoryPage from './pages/HistoryPage'
-import DashboardPage from './pages/DashboardPage'
-import VirtualTryOnPage from './pages/VirtualTryOnPage'
 import Navbar from './components/Navbar'
 
 function App() {
@@ -18,8 +16,6 @@ function App() {
           <Route path="/measurement" element={<MeasurementPage />} />
           <Route path="/result" element={<ResultPage />} />
           <Route path="/history" element={<HistoryPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/virtual-tryon" element={<VirtualTryOnPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

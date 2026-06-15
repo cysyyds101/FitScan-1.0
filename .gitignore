@@ -47,3 +47,34 @@ data/*
 # Temporary files
 *.tmp
 temp/
+
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# IDE and tools
+.claude/
+.cursor/
+.obsidian/
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Test files
+test_output.txt
+*.jpg
+*.png
+*.gif
+
+# Large files and models
+movenet_model/
+idol_repo/
+1/
+FitScan/
+FitScan-Notes/
+技术实现/
+
+# Other
+*.mdc
