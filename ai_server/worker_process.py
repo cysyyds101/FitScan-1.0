@@ -93,6 +93,11 @@ _NORMALIZE_OUT_DIR = Path(__file__).resolve().parent / "data" / "normalized"
 _NORMALIZE_SIZE = 512
 _NORMALIZE_PADDING = 1.1  # crop square side = max(w, h) * padding
 
+# Where reconstructed GLBs land. AI server-side; dev machine mounts via
+# /static/reconstructions in prod (shared volume) or via callback in tests.
+_RECON_OUT_DIR = Path(__file__).resolve().parent / "data" / "reconstructions"
+_GLTF_FIXTURE = Path(__file__).resolve().parent / "data" / "fixtures" / "sample.glb"
+
 
 def _resolve_source_path(image_url: str | None, upload_id: str) -> Path:
     """Map image_url or upload_id to a readable file on disk.
@@ -213,6 +218,105 @@ def run_normalize(task: Task) -> dict[str, Any]:
     return result
 
 
+def _patch_backend(callback: str, payload: dict) -> None:
+    """Best-effort PATCH to the dev machine. Skips on missing httpx."""
+    try:
+        import httpx
+    except ImportError:
+        logger.warning("[worker] httpx missing; skipping backend PATCH")
+        return
+    try:
+        httpx.patch(callback, json=payload, timeout=10.0)
+    except Exception as e:
+        logger.warning(f"[worker] backend PATCH failed ({callback}): {e}")
+
+
+def run_smpl_fast(task: Task) -> dict[str, Any]:
+    """Phase D handler: SMPL reconstruction from a normalized crop.
+
+    In production this would:
+        1. Load the normalized crop (PIL).
+        2. Run SMPLer-X / HMR2.0 / CLIFF (PyTorch) to get SMPL params.
+        3. Forward-kinemat the SMPL mesh to get a posed body.
+        4. Export to GLB (trimesh / pygltflib).
+
+    In this build (dev machine has no GPU / no model weights) we substitute
+    a "mock inference" that:
+        1. Verifies the normalized crop exists.
+        2. Copies the GLTF fixture to <RECON_OUT_DIR>/<recon_id>.glb.
+        3. Reports a deterministic metrics dict so SP-4 can verify.
+
+    The dispatcher + queue + backend callback path is fully exercised
+    either way; only the GPU call is stubbed.
+    """
+    upload_id = task.payload.get("upload_id", "")
+    recon_id = task.payload.get("recon_id", "")
+    normalized_path = task.payload.get("normalized_path")
+    backend_callback = task.payload.get("backend_callback")
+
+    # 1. Verify normalized input exists
+    if normalized_path:
+        np_ = Path(normalized_path)
+        if not np_.exists():
+            # Try the standard location
+            alt = _NORMALIZE_OUT_DIR / f"{upload_id}.jpg"
+            if alt.exists():
+                np_ = alt
+            else:
+                raise FileNotFoundError(
+                    f"normalized crop not found: {normalized_path}"
+                )
+        src_size = np_.stat().st_size
+    else:
+        # No path provided — assume the standard one and require its existence
+        np_ = _NORMALIZE_OUT_DIR / f"{upload_id}.jpg"
+        if not np_.exists():
+            raise FileNotFoundError(f"normalized crop missing for {upload_id}")
+        src_size = np_.stat().st_size
+
+    # 2. Output: copy GLB fixture to a stable path
+    _RECON_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _RECON_OUT_DIR / f"{recon_id or upload_id}.glb"
+    if not _GLTF_FIXTURE.exists():
+        raise FileNotFoundError(f"GLB fixture missing: {_GLTF_FIXTURE}")
+    out_path.write_bytes(_GLTF_FIXTURE.read_bytes())
+
+    # 3. Mock metrics
+    metrics = {
+        "format": "glb",
+        "poly_count": 3,        # 1 triangle
+        "size_bytes": out_path.stat().st_size,
+        "src_normalized_bytes": src_size,
+        "method": "smpl_fast",
+        "mock": True,           # tells prod code this is a stub
+    }
+
+    result = {
+        "upload_id": upload_id,
+        "recon_id": recon_id,
+        "glb_path": str(out_path),
+        "metrics": metrics,
+    }
+
+    # 4. PATCH backend so reconstructions row flips to done
+    if backend_callback:
+        _patch_backend(
+            backend_callback,
+            {
+                "status": "done",
+                "glb_path": str(out_path),
+                "metrics": metrics,
+            },
+        )
+    return result
+
+
+def run_smpl_multi(task: Task) -> dict[str, Any]:
+    """Phase E stub: multi-view fusion. Reuses the single-view path with
+    a marker until SMPLer-X multi-view lands."""
+    return run_smpl_fast(task)  # stub for now
+
+
 def run_task(task: Task) -> dict[str, Any]:
     """Dispatch by task_type. Phase A has no real GPU work yet — return mock.
 
@@ -221,6 +325,10 @@ def run_task(task: Task) -> dict[str, Any]:
     """
     if task.task_type == "normalize":
         return run_normalize(task)
+    if task.task_type == "smpl_fast":
+        return run_smpl_fast(task)
+    if task.task_type == "smpl_multi":
+        return run_smpl_multi(task)
 
     gpu = os.environ.get("FITSCAN_GPU_ID", "?")
     role = os.environ.get("FITSCAN_ROLE", "?")
