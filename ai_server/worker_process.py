@@ -27,6 +27,7 @@ import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 from typing import Any
 
 # Bootstrap path so 'ai_server.queue.*' imports work regardless of CWD
@@ -84,15 +85,143 @@ class HeartbeatWriter(threading.Thread):
                 time.sleep(1)
 
 
-# ─── Task dispatch (stub for Phase A) ────────────────────────────────────────
+# ─── Task dispatch ──────────────────────────────────────────────────────────
+
+# Where normalized crops land. AI server-side, NOT dev machine.
+# Phase D's SMPLer-X worker reads from here.
+_NORMALIZE_OUT_DIR = Path(__file__).resolve().parent / "data" / "normalized"
+_NORMALIZE_SIZE = 512
+_NORMALIZE_PADDING = 1.1  # crop square side = max(w, h) * padding
+
+
+def _resolve_source_path(image_url: str | None, upload_id: str) -> Path:
+    """Map image_url or upload_id to a readable file on disk.
+
+    Supports:
+        - file:// URLs and absolute paths
+        - http(s):// URLs (downloads to a temp cache)
+        - plain upload_id 'up-xxx' (resolves under dev machine uploads dir)
+    """
+    if image_url:
+        if image_url.startswith("file://"):
+            return Path(image_url[len("file://"):])
+        if image_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"http(s) image_url not supported in this build: {image_url}"
+            )
+        p = Path(image_url)
+        if p.is_absolute() and p.exists():
+            return p
+
+    # Fallback: dev machine uploads dir (shared via NFS / volume in prod)
+    # We respect $DEV_UPLOADS_DIR override so tests can isolate.
+    dev_dir = Path(os.environ.get("DEV_UPLOADS_DIR", "")).resolve()
+    if upload_id and dev_dir:
+        for ext in (".jpg", ".jpeg", ".png", ".webp"):
+            cand = dev_dir / f"{upload_id}{ext}"
+            if cand.exists():
+                return cand
+    raise FileNotFoundError(f"cannot resolve source for upload_id={upload_id} image_url={image_url}")
+
+
+def run_normalize(task: Task) -> dict[str, Any]:
+    """Phase C handler: PIL-only 512x512 centered human crop.
+
+    Pipeline (no torch / no CUDA / no SMPL):
+        1. Open image with PIL.
+        2. Convert to grayscale + Otsu threshold (PIL ImageOps).
+        3. Find non-zero bbox of subject.
+        4. Center-crop a square = max(w, h) * 1.1 around bbox center.
+        5. Resize to 512x512, save as JPEG.
+        6. If backend_callback set, PATCH it with the result.
+    """
+    from PIL import Image, ImageOps  # local import keeps startup fast
+    import io
+    import json
+    try:
+        import httpx
+    except ImportError:
+        httpx = None
+
+    upload_id = task.payload.get("upload_id", "")
+    image_url = task.payload.get("image_url")
+    backend_callback = task.payload.get("backend_callback")
+
+    src = _resolve_source_path(image_url, upload_id)
+    img = Image.open(src).convert("RGB")
+
+    # Otsu threshold on grayscale to find subject bbox
+    gray = img.convert("L")
+    thresholded = ImageOps.autocontrast(gray)  # improve contrast first
+    thresh = thresholded.point(lambda p: 255 if p > 110 else 0)  # crude binarization
+    bbox = thresh.getbbox()
+
+    if bbox is None:
+        # No clear subject found — fall back to center-crop whole image
+        bbox = (0, 0, img.width, img.height)
+        padding = 1.0
+    else:
+        padding = _NORMALIZE_PADDING
+
+    # Square crop centered on bbox
+    x0, y0, x1, y1 = bbox
+    bw, bh = x1 - x0, y1 - y0
+    cx, cy = x0 + bw // 2, y0 + bh // 2
+    side = int(max(bw, bh) * padding)
+    # Clamp to image bounds
+    half = side // 2
+    crop_box = (
+        max(0, cx - half),
+        max(0, cy - half),
+        min(img.width, cx - half + side),
+        min(img.height, cy - half + side),
+    )
+    cropped = img.crop(crop_box)
+    # Make sure final is exactly 512x512
+    cropped = cropped.resize((_NORMALIZE_SIZE, _NORMALIZE_SIZE), Image.LANCZOS)
+
+    _NORMALIZE_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _NORMALIZE_OUT_DIR / f"{upload_id}.jpg"
+    cropped.save(out_path, format="JPEG", quality=92)
+
+    result = {
+        "upload_id": upload_id,
+        "normalized_path": str(out_path),
+        "width": _NORMALIZE_SIZE,
+        "height": _NORMALIZE_SIZE,
+        "source": str(src),
+        "bbox": list(bbox),
+    }
+
+    # Optional: PATCH backend to update the uploads row
+    if backend_callback and httpx is not None:
+        try:
+            httpx.patch(
+                backend_callback,
+                json={
+                    "status": "NORMALIZED",
+                    "normalized_path": str(out_path),
+                    "task_id": task.id,
+                },
+                timeout=10.0,
+            )
+        except Exception as e:
+            logger.warning(f"[worker normalize] backend_callback PATCH failed: {e}")
+    elif backend_callback and httpx is None:
+        logger.warning("[worker normalize] httpx missing; skipping backend_callback PATCH")
+
+    return result
+
 
 def run_task(task: Task) -> dict[str, Any]:
     """Dispatch by task_type. Phase A has no real GPU work yet — return mock.
 
     Phase D (FAST PATH) and Phase E (SLOW PATH) will add real implementations.
-    For now, return a stub result so the lifecycle (PENDING→RUNNING→DONE) can
-    be verified end-to-end via SP-1 and SP-2.
+    Phase C adds real (but GPU-free) normalize handling.
     """
+    if task.task_type == "normalize":
+        return run_normalize(task)
+
     gpu = os.environ.get("FITSCAN_GPU_ID", "?")
     role = os.environ.get("FITSCAN_ROLE", "?")
     logger.info(f"[worker gpu={gpu} role={role}] running {task.id} type={task.task_type}")

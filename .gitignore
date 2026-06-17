@@ -3,78 +3,36 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environment
+.venv/
 venv/
-ENV/
 env/
-.venv
+
+# Node
+node_modules/
+frontend/dist/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 .DS_Store
 
-# Project specific
-data/*
-!data/.gitkeep
-*.mp4
-*.avi
-*.mov
-
-# Logs
+# Logs / temp
 *.log
-
-# Temporary files
 *.tmp
-temp/
+test_output.txt
 
-# Node modules
-node_modules/
-frontend/node_modules/
-
-# IDE and tools
+# Spec-kit / Cursor
 .claude/
 .cursor/
-.obsidian/
 
 # Build outputs
 dist/
 build/
-*.log
 
-# Test files
-test_output.txt
-*.jpg
-*.png
-*.gif
-
-# Large files and models
-movenet_model/
-idol_repo/
-1/
-FitScan/
-FitScan-Notes/
-技术实现/
-
-# Other
-*.mdc
+# Backend runtime data (uploads / reconstructions / SQLite)
+backend/data/
+*.db
+*.db-wal
+*.db-shm

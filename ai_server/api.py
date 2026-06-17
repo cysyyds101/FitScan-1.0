@@ -3,7 +3,7 @@
 This is the ONLY process that exposes HTTP. Workers do not.
 
 Responsibilities:
-    - Accept inference jobs (POST /infer/smpl_fast, POST /infer/smpl_multi).
+    - Accept inference jobs (POST /infer/smpl_fast, POST /infer/smpl_multi, POST /infer/normalize).
     - Persist the job to SQLite + put it on the in-process queue.
     - Return job_id immediately (202-style 'processing').
     - Serve status/result queries (GET /status/{id}, GET /result/{id}).
@@ -16,12 +16,14 @@ What this process does NOT do:
     - It does NOT call the workers directly — workers pull from the queue.
 
 Phase A has the queue pipeline working end-to-end with mock run_task.
-Phase D adds real SMPLer-X inference. Phase C adds normalize.
+Phase C adds normalize (PIL only, no GPU).
+Phase D adds real SMPLer-X inference.
 
 Routes added in this file:
     GET  /health
     POST /infer/smpl_fast
     POST /infer/smpl_multi
+    POST /infer/normalize
     GET  /status/{task_id}
     GET  /result/{task_id}
 """
@@ -62,6 +64,22 @@ class SmplMultiRequest(BaseModel):
     """Multi-image SMPLer-X fusion job."""
     upload_id: str
     image_urls: list[str] = Field(default_factory=list, description="Multiple views of the subject")
+
+
+class NormalizeRequest(BaseModel):
+    """Image normalization job (Phase C).
+
+    Reads the uploaded image and produces a fixed-format 512x512 centered
+    human crop. PIL only — no GPU, no torch. The output is what Phase D's
+    SMPLer-X pipeline expects.
+    """
+    upload_id: str = Field(..., description="Upload id from /api/uploads (dev machine)")
+    image_url: str | None = Field(None, description="URL/path to source image (else resolved from upload_id)")
+    backend_callback: str | None = Field(
+        None,
+        description="Optional URL the AI server PATCHes with the normalized result. "
+                    "If unset, dev machine polls GET /status/{task_id} instead.",
+    )
 
 
 class EnqueueResponse(BaseModel):
@@ -170,6 +188,33 @@ def enqueue_smpl_multi(req: SmplMultiRequest) -> EnqueueResponse:
         payload={
             "upload_id": req.upload_id,
             "image_urls": req.image_urls,
+        },
+    )
+    enqueue(task)
+    return EnqueueResponse(task_id=task.id, status="PENDING", task_type=task.task_type)
+
+
+@app.post("/infer/normalize", response_model=EnqueueResponse, status_code=202)
+def enqueue_normalize(req: NormalizeRequest) -> EnqueueResponse:
+    """Enqueue an image normalization job (Phase C).
+
+    The worker (PIL only, no GPU) will:
+        1. Load the source image from image_url (or dev-machine uploads dir).
+        2. Otsu-threshold to find the subject bounding box.
+        3. Center-crop a square (1.1x padding) and resize to 512x512 JPEG.
+        4. Save to ai_server/data/normalized/<upload_id>.jpg.
+        5. If backend_callback is set, PATCH that URL with the result.
+
+    Returns immediately with task_id. The dev machine's normalize_service
+    updates the uploads row when the worker reports completion.
+    """
+    task = Task(
+        id=new_task_id("norm"),
+        task_type="normalize",
+        payload={
+            "upload_id": req.upload_id,
+            "image_url": req.image_url,
+            "backend_callback": req.backend_callback,
         },
     )
     enqueue(task)
