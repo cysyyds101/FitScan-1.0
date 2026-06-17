@@ -312,9 +312,89 @@ def run_smpl_fast(task: Task) -> dict[str, Any]:
 
 
 def run_smpl_multi(task: Task) -> dict[str, Any]:
-    """Phase E stub: multi-view fusion. Reuses the single-view path with
-    a marker until SMPLer-X multi-view lands."""
-    return run_smpl_fast(task)  # stub for now
+    """Phase E handler: SMPLer-X multi-view fusion from N normalized crops.
+
+    Routing rules (decided in recon_service before the task is enqueued):
+        - 0 views  -> never reaches here; service raises 400
+        - 1 view   -> routed to smpl_fast; doesn't reach here
+        - 2 views  -> routed to smpl_fast with a warning; doesn't reach here
+        - >=3 views -> we run multi-view fusion
+
+    In production this would:
+        1. Load N normalized crops (PIL).
+        2. Run SMPLer-X multi-view fusion (PyTorch3D) to get fused SMPL params.
+        3. Forward-kinemat the SMPL mesh + fuse textures across views.
+        4. Export a single GLB (trimesh / pygltflib).
+
+    In this build (dev machine has no GPU / no model weights) we substitute
+    a "mock multi-view inference" that:
+        1. Verifies every image_url exists.
+        2. Counts views and reports view_count.
+        3. Copies the GLTF fixture to <RECON_OUT_DIR>/<recon_id>.glb
+           (SAME GLB as single-view; prod replaces this with a fused mesh).
+        4. Reports metrics with method="smpl_multi" and view_count=N.
+
+    Quality over single-view is determined by the real model; this stub
+    just exercises the pipeline (N images in, 1 GLB out).
+    """
+    upload_id = task.payload.get("upload_id", "")
+    recon_id = task.payload.get("recon_id", "")
+    image_urls = task.payload.get("image_urls", [])
+    backend_callback = task.payload.get("backend_callback")
+
+    if not isinstance(image_urls, list) or not image_urls:
+        raise ValueError("smpl_multi requires non-empty image_urls list")
+
+    # Verify every source file exists; capture sizes
+    src_sizes: list[int] = []
+    for u in image_urls:
+        p = Path(u)
+        if not p.exists():
+            # Try the standard normalized crop location
+            alt = _NORMALIZE_OUT_DIR / Path(u).name
+            if alt.exists():
+                p = alt
+            else:
+                raise FileNotFoundError(f"multi-view source missing: {u}")
+        src_sizes.append(p.stat().st_size)
+
+    view_count = len(image_urls)
+
+    # Output: single GLB regardless of view count
+    _RECON_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = _RECON_OUT_DIR / f"{recon_id or upload_id}.glb"
+    if not _GLTF_FIXTURE.exists():
+        raise FileNotFoundError(f"GLB fixture missing: {_GLTF_FIXTURE}")
+    out_path.write_bytes(_GLTF_FIXTURE.read_bytes())
+
+    metrics = {
+        "format": "glb",
+        "poly_count": 3,            # 1 triangle; prod: 6,890+
+        "size_bytes": out_path.stat().st_size,
+        "view_count": view_count,
+        "src_total_bytes": sum(src_sizes),
+        "method": "smpl_multi",
+        "mock": True,
+    }
+
+    result = {
+        "upload_id": upload_id,
+        "recon_id": recon_id,
+        "glb_path": str(out_path),
+        "metrics": metrics,
+        "view_count": view_count,
+    }
+
+    if backend_callback:
+        _patch_backend(
+            backend_callback,
+            {
+                "status": "done",
+                "glb_path": str(out_path),
+                "metrics": metrics,
+            },
+        )
+    return result
 
 
 def run_task(task: Task) -> dict[str, Any]:

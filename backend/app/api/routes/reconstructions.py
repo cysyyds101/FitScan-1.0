@@ -38,6 +38,7 @@ def create_reconstruction(data: ReconstructionCreate, request: Request):
             upload_id=data.upload_id,
             method=data.method,
             backend_callback_url=callback,
+            image_urls=data.image_urls or None,
         )
     except ValueError as e:
         msg = str(e)

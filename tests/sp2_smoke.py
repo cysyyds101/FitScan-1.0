@@ -220,12 +220,12 @@ def test_http_post_reconstruction() -> None:
 
         r = client.post(
             "/api/reconstructions",
-            json={"upload_id": uid, "method": "smpl_multi"},
+            json={"upload_id": uid, "method": "smpl_fast"},
         )
         check("POST /api/reconstructions -> 201", r.status_code == 201, f"got {r.status_code}")
         body = r.json()
         check("recon is pending", body["status"] == "pending")
-        check("recon method stored", body["method"] == "smpl_multi")
+        check("recon method stored", body["method"] == "smpl_fast")
         check("recon linked to upload", body["upload_id"] == uid)
 
         # Bad upload_id -> 404

@@ -103,6 +103,10 @@ class ReconstructionCreate(BaseModel):
 
     upload_id: str
     method: ReconMethod = "smpl_fast"
+    # Phase E: for method=smpl_multi, caller passes the N normalized crop
+    # paths here. If empty, the service resolves the single upload's
+    # normalized crop (smpl_fast behavior).
+    image_urls: list[str] = Field(default_factory=list)
 
 
 class ReconstructionUpdate(BaseModel):

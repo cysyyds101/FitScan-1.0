@@ -57,6 +57,7 @@ def create_and_trigger(
     upload_id: str,
     method: str = "smpl_fast",
     backend_callback_url: Optional[str] = None,
+    image_urls: Optional[list] = None,
 ) -> dict:
     """Create a recon row AND immediately enqueue the SMPL job on the AI server.
 
@@ -67,11 +68,36 @@ def create_and_trigger(
     ``{recon_id}`` with the freshly-created recon id. This lets the caller
     pass something like ``http://dev/api/reconstructions/{recon_id}/callback``
     without knowing the id in advance.
+
+    Hybrid routing (Phase E):
+        0 views  -> ValueError ("at least one image is required")
+        1 view   -> auto-route to smpl_fast
+        2 views  -> warn, route to smpl_fast (multi-view needs >=3)
+        >=3 views -> smpl_multi (capped at 8)
     """
+    image_urls = list(image_urls or [])
     if upload_storage.get_upload(upload_id) is None:
         raise ValueError(f"upload not found: {upload_id}")
     if method not in ("smpl_fast", "smpl_multi"):
         raise ValueError(f"unsupported method: {method!r}")
+
+    # Hybrid routing
+    n = len(image_urls)
+    if method == "smpl_multi":
+        if n == 0:
+            raise ValueError("at least one image is required for smpl_multi")
+        if n == 1:
+            logger.info(f"[recon_service] {n} view -> auto-route to smpl_fast")
+            method = "smpl_fast"
+        elif n == 2:
+            logger.warning(
+                f"[recon_service] {n} views -> smpl_multi needs >=3; "
+                f"falling back to smpl_fast"
+            )
+            method = "smpl_fast"
+        elif n > 8:
+            raise ValueError(f"too many views: {n} (max 8)")
+    # smpl_fast with n==0 is fine — we resolve from upload's normalized crop
 
     # Insert row at status=pending
     recon = recon_storage.create_reconstruction(upload_id=upload_id, method=method)
@@ -83,36 +109,39 @@ def create_and_trigger(
     else:
         callback = backend_callback_url
 
-    # Resolve source path
-    src = _resolve_normalized_path(upload_id)
-    if src is None:
-        # Fall back to raw upload path
-        up_row = storage.get_db().execute(
-            "SELECT path FROM uploads WHERE id = ?", (upload_id,)
-        ).fetchone()
-        if up_row:
-            cand = upload_storage.BACKEND_ROOT / up_row["path"]
-            if cand.exists():
-                src = cand
-    if src is None:
-        # No source anywhere — still enqueue, AI server will see error
-        src_path = None
-    else:
-        src_path = str(src)
+    # Resolve a single source path for the smpl_fast path
+    single_src: Optional[str] = None
+    if method == "smpl_fast":
+        if n == 0:
+            # Caller didn't provide image_urls; use the upload's normalized
+            # crop or the raw upload path as a fallback.
+            src = _resolve_normalized_path(upload_id)
+            if src is None:
+                up_row = storage.get_db().execute(
+                    "SELECT path FROM uploads WHERE id = ?", (upload_id,)
+                ).fetchone()
+                if up_row:
+                    cand = upload_storage.BACKEND_ROOT / up_row["path"]
+                    if cand.exists():
+                        src = cand
+            single_src = str(src) if src else None
+        else:
+            single_src = image_urls[0]
 
     # Pick the right sync shim
     if method == "smpl_fast":
         ai_resp = ai_client.smpl_fast_sync(
             upload_id=upload_id,
-            image_url=src_path,
-            backend_callback=callback,  # substituted above
+            image_url=single_src,
+            backend_callback=callback,
             recon_id=recon_id,
         )
     else:
         ai_resp = ai_client.smpl_multi_sync(
             upload_id=upload_id,
-            image_url=src_path,
-            backend_callback=callback,  # substituted above
+            image_url=None,
+            image_urls=image_urls,
+            backend_callback=callback,
             recon_id=recon_id,
         )
 
@@ -169,11 +198,12 @@ def _ensure_ai_client_sync():
         ai_client.smpl_fast_sync = _sync  # type: ignore[attr-defined]
 
     if not hasattr(ai_client, "smpl_multi_sync"):
-        def _sync(upload_id, image_url, backend_callback, recon_id):
+        def _sync(upload_id, image_url, backend_callback, recon_id, image_urls=None):
             return asyncio.run(
                 ai_client.smpl_multi(
                     upload_id=upload_id,
                     image_url=image_url,
+                    image_urls=image_urls,
                     backend_callback=backend_callback,
                     recon_id=recon_id,
                 )

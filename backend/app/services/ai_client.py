@@ -225,16 +225,32 @@ class AIClient:
         self,
         upload_id: str,
         image_url: str | None = None,
+        image_urls: list[str] | None = None,
         backend_callback: str | None = None,
         recon_id: str | None = None,
     ) -> dict:
-        """Enqueue a multi-view SMPLer-X fusion job (Phase E)."""
+        """Enqueue a multi-view SMPLer-X fusion job (Phase E).
+
+        Accepts EITHER:
+            - image_url (single)        -> POSTed as image_url
+            - image_urls (list, >=1)    -> POSTed as image_urls
+        The AI server prefers image_urls; if only image_url is given we
+        wrap it in a single-element list to keep the wire format uniform.
+        """
         if httpx is None:
             return {"task_id": None, "status": "ERROR", "error": "httpx not installed"}
 
+        # Normalize: if both empty, error. If only image_url, wrap.
+        urls = list(image_urls) if image_urls else []
+        if not urls and image_url:
+            urls = [image_url]
+        if not urls:
+            return {"task_id": None, "status": "ERROR", "error": "no images provided"}
+
         payload = {
             "upload_id": upload_id,
-            "image_url": image_url,
+            "image_url": urls[0] if len(urls) == 1 else None,
+            "image_urls": urls,
             "backend_callback": backend_callback,
             "recon_id": recon_id,
         }
