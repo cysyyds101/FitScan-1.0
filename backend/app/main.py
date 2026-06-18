@@ -9,6 +9,7 @@ from app.api.routes import measurements
 from app.api.routes import ai_inference
 from app.api.routes import uploads
 from app.api.routes import reconstructions
+from app.api.routes import assets
 from app.services.camera_ws import router as camera_ws_router
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,7 @@ app.include_router(clothing.router, prefix="/api", tags=["clothing"])
 app.include_router(measurements.router, prefix="/api", tags=["measurements"])
 app.include_router(uploads.router, prefix="/api", tags=["uploads"])
 app.include_router(reconstructions.router, prefix="/api", tags=["reconstructions"])
+app.include_router(assets.router, tags=["assets"])
 app.include_router(ai_inference.router, prefix="/api/ai", tags=["AI inference"])
 app.include_router(camera_ws_router, prefix="/ws", tags=["camera"])
 

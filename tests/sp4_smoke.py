@@ -70,7 +70,7 @@ import os as _os
 _orig_to_url = _recon_storage._to_url
 
 
-def _patched_to_url(glb_path: str | None) -> str | None:
+def _patched_to_url(glb_path: str | None, recon_id: str | None = None) -> str | None:
     if not glb_path:
         return None
     return f"/static/reconstructions/{Path(glb_path).name}"

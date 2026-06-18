@@ -96,6 +96,14 @@ class ReconstructionItem(BaseModel):
     status: ReconStatus = "pending"
     ai_task_id: Optional[str] = None
     created_at: datetime
+    # Adaptive polling hint (Phase F upgrade): when should the frontend
+    # poll next? Server-side authority so the client doesn't spam the API
+    # or wake the GPU worker unnecessarily.
+    #   pending    -> 2000ms
+    #   processing -> 4000ms
+    #   near_done  -> 1000ms  (future: when metrics shows >80% progress)
+    #   done/failed -> 0     (stop polling)
+    next_poll_ms: int = 2000
 
 
 class ReconstructionCreate(BaseModel):

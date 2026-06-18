@@ -77,6 +77,27 @@ def update_status(
     if not existing:
         return None
 
+    # Phase F: when a GLB path arrives (typically on status=done), register
+    # it in the asset registry so /assets/glb/{id} can serve it. This makes
+    # the AI server -> backend handoff explicit and uniform.
+    if glb_path is not None and status == "done":
+        try:
+            from app.services import asset_service
+            asset_service.register(
+                absolute_path=glb_path,
+                kind="glb",
+                owner_id=recon_id,
+            )
+        except FileNotFoundError:
+            # The AI server told us about a file that doesn't exist yet.
+            # We still record the glb_path in the recon row (so the URL
+            # resolution will hit 410 Gone until the file lands), but
+            # the asset registry stays empty for this id.
+            pass
+        except Exception as e:
+            import logging
+            logging.warning(f"[recon_storage] asset register failed for {recon_id}: {e}")
+
     sets: list[str] = ["status = ?"]
     vals: list = [status]
     if glb_path is not None:
@@ -110,11 +131,12 @@ def get_reconstruction(recon_id: str) -> ReconstructionItem | None:
         upload_id=d["upload_id"],
         method=d["method"],
         glb_path=d["glb_path"],
-        glb_url=_to_url(d["glb_path"]),
+        glb_url=_to_url(d["glb_path"], recon_id=d["id"]),
         metrics=json.loads(d["metrics_json"]) if d["metrics_json"] else None,
         status=d["status"],
         ai_task_id=d["ai_task_id"],
         created_at=datetime.fromisoformat(d["created_at"]),
+        next_poll_ms=_next_poll_ms(d["status"]),
     )
 
 
@@ -142,7 +164,41 @@ def list_reconstructions(
     return out
 
 
-def _to_url(glb_path: str | None) -> str | None:
+def _to_url(glb_path: str | None, recon_id: str | None = None) -> str | None:
+    """Resolve the canonical URL for a recon's GLB.
+
+    Phase F architecture: ALWAYS go through the asset registry. The
+    /assets/glb/{id} endpoint is the single source of truth for
+    frontend URLs; the absolute path on disk stays private to backend.
+
+    recon_id is preferred (set by the caller). Falls back to inferring
+    it from the GLB filename (works because AI server worker writes
+    files as <recon_id>.glb).
+    """
     if not glb_path:
         return None
-    return f"/static/reconstructions/{Path(glb_path).name}"
+    from app.services import asset_service  # local to avoid circular
+    if recon_id is None:
+        recon_id = Path(glb_path).stem
+    url = asset_service.public_url_for_owner(recon_id, kind="glb")
+    if url is not None:
+        return url
+    # No registration yet (e.g. callback arrived but file not on disk).
+    # Return a placeholder so callers can show "preparing" without
+    # breaking the JSON schema.
+    return f"/assets/glb/_pending_{recon_id}"
+
+
+def _next_poll_ms(status: str) -> int:
+    """Adaptive polling hint. See ReconstructionItem.next_poll_ms docstring.
+
+    PENDING  -> 2000ms (just created, AI server may not have picked up yet)
+    PROCESSING -> 4000ms (worker is running, less urgency)
+    DONE / FAILED -> 0ms (stop polling)
+    """
+    return {
+        "pending": 2000,
+        "processing": 4000,
+        "done": 0,
+        "failed": 0,
+    }.get(status, 2000)

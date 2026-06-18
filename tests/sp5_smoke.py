@@ -81,7 +81,7 @@ _ai_client.ai_client.smpl_fast_sync = _mock_smpl_fast_sync  # type: ignore[attr-
 _ai_client.ai_client.smpl_multi_sync = _mock_smpl_multi_sync  # type: ignore[attr-defined]
 
 # Override _to_url for static serve path
-def _patched_to_url(glb_path):
+def _patched_to_url(glb_path, recon_id=None):
     if not glb_path:
         return None
     return f"/static/reconstructions/{Path(glb_path).name}"

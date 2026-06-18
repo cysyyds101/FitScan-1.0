@@ -266,7 +266,7 @@ def test_e2e() -> None:
         )
         check("PATCH -> 200", patch.status_code == 200)
         check("PATCH stored status", patch.json()["status"] == "done")
-        check("PATCH stored glb_url", patch.json().get("glb_url", "").endswith(".glb"))
+        check("PATCH stored glb_url", "/assets/glb/" in patch.json().get("glb_url", ""))
 
         # 4. Fetch back
         got = client.get(f"/api/reconstructions/{rid}").json()
