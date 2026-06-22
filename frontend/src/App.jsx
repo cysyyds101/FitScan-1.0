@@ -1,26 +1,19 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import MeasurementPage from './pages/MeasurementPage'
-import ResultPage from './pages/ResultPage'
-import HistoryPage from './pages/HistoryPage'
-import Navbar from './components/Navbar'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
+import VirtualTryOnPage from './pages/VirtualTryOnPage';
+import MeasurementPage from './pages/MeasurementPage';
 
-function App() {
+export default function App() {
   return (
-    <Router>
-      <Navbar />
-      <div className="container">
+    <ErrorBoundary>
+      <BrowserRouter>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/measurement" element={<MeasurementPage />} />
-          <Route path="/result" element={<ResultPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/" element={<Navigate to="/virtual-tryon" replace />} />
+          <Route path="/virtual-tryon" element={<VirtualTryOnPage />} />
+          <Route path="/measure" element={<MeasurementPage />} />
+          <Route path="/tryon" element={<Navigate to="/virtual-tryon" replace />} />
         </Routes>
-      </div>
-    </Router>
-  )
+      </BrowserRouter>
+    </ErrorBoundary>
+  );
 }
-
-export default App

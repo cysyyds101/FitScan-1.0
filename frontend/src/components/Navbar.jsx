@@ -1,39 +1,31 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-
-const Navbar = () => {
+/**
+ * Navbar.jsx — 全站导航栏。
+ *
+ * 取代每个页面里的 <header className="topbar">，统一 logo + 导航。
+ * 路径通过 window.location.pathname 读取，避免引入额外的 router hook。
+ */
+export default function Navbar() {
+  const path = window.location.pathname;
+  const isActive = (p) => path === p;
   return (
-    <nav className="navbar">
-      <div className="container navbar-container">
-        <Link to="/" className="navbar-logo">
-          <motion.span
-            whileHover={{ scale: 1.02 }}
-            transition={{ duration: 0.2 }}
-          >
-            FitScan
-          </motion.span>
-        </Link>
-        <ul className="navbar-links">
-          <li>
-            <Link to="/">首页</Link>
-          </li>
-          <li>
-            <Link to="/measurement">开始测量</Link>
-          </li>
-          <li>
-            <Link to="/history">历史记录</Link>
-          </li>
-          <li>
-            <Link to="/dashboard">数据看板</Link>
-          </li>
-          <li>
-            <Link to="/virtual-tryon">虚拟换衣</Link>
-          </li>
-        </ul>
+    <header className="topbar">
+      <div className="logo">
+        FitScan <span className="tag">Beta</span>
       </div>
-    </nav>
-  )
+      <nav className="topbar-nav">
+        <a
+          href="/virtual-tryon"
+          className={isActive('/virtual-tryon') ? 'nav-link active' : 'nav-link'}
+        >
+          虚拟试衣
+        </a>
+        <a
+          href="/measure"
+          className={isActive('/measure') ? 'nav-link active' : 'nav-link'}
+        >
+          测量
+        </a>
+      </nav>
+    </header>
+  );
 }
-
-export default Navbar

@@ -1,295 +1,322 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import api from '../utils/api'
+/**
+ * MeasurementPage.jsx — 人体测量页面（拍照上传流）。
+ *
+ * 流程：
+ * 1. getUserMedia → 实时摄像头预览（前置摄像头）
+ * 2. 用户拍摄最多 2 张：正面 / 侧面
+ * 3. 自动上传 → POST /api/uploads 收集 upload_ids
+ * 4. 触发测量 → POST /api/measurements { upload_ids }
+ * 5. 轮询 GET /api/measurements/{id}（2s）直到 status=done
+ * 6. 显示身高 / 胸围 / 腰围 / 臀围
+ *
+ * 注意：当前 useCameraStream 是 RealSense 深度流 WebSocket hook，不适合
+ * 拍照流程。本组件直接用浏览器 getUserMedia，不依赖 useCameraStream。
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { uploadsApi } from '../api/client';
+import Navbar from '../components/Navbar';
+import '../styles/global.css';
 
-const MeasurementPage = () => {
-  const [step, setStep] = useState(1) // 1: 准备阶段, 2: 校准阶段, 3: 测量阶段
-  const [isCameraActive, setIsCameraActive] = useState(false)
-  const [referenceDetected, setReferenceDetected] = useState(false)
-  const [measurementData, setMeasurementData] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const videoRef = useRef(null)
-  const navigate = useNavigate()
+const SHOT_LABELS = ['正面', '侧面'];
+const MAX_SHOTS = 2;
 
-  // 模拟检测到的参照物类型
-  const [referenceType, setReferenceType] = useState(null)
+export default function MeasurementPage() {
+  // shots live in the page so CameraStage (writer) and MeasurementPanel
+  // (reader/uploader) can share them via plain props.
+  const [shots, setShots] = useState([]); // [{label, file, url}]
 
-  // 开始摄像头
-  const startCamera = async () => {
-    try {
-      setLoading(true)
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setIsCameraActive(true)
-      }
-      setLoading(false)
-    } catch (error) {
-      console.error('Error accessing camera:', error)
-      setLoading(false)
-    }
-  }
+  const addShot = useCallback((shot) => {
+    setShots((prev) => (prev.length >= MAX_SHOTS ? prev : [...prev, shot]));
+  }, []);
 
-  // 停止摄像头
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject
-      stream.getTracks().forEach(track => track.stop())
-      setIsCameraActive(false)
-    }
-  }
-
-  // 模拟参照物检测
-  const detectReference = async () => {
-    setLoading(true)
-    try {
-      const response = await api.detectReference('A4')
-      if (response.data.detected) {
-        setReferenceDetected(true)
-        setReferenceType(response.data.referenceType)
-        setStep(3) // 进入测量阶段
-      }
-    } catch (error) {
-      console.error('Error detecting reference:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 模拟开始测量
-  const startMeasurement = async () => {
-    setLoading(true)
-    try {
-      const response = await api.startMeasurement()
-      const measurementData = response.data
-      setMeasurementData(measurementData)
-      // 跳转到结果页面
-      navigate('/result', { state: { measurementData } })
-    } catch (error) {
-      console.error('Error starting measurement:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // 重新校准
-  const recalibrate = () => {
-    setStep(2)
-    setReferenceDetected(false)
-    setReferenceType(null)
-  }
-
-  // 组件卸载时停止摄像头
-  useEffect(() => {
-    return () => {
-      stopCamera()
-    }
-  }, [])
+  const resetShots = useCallback(() => {
+    setShots((prev) => {
+      prev.forEach((s) => URL.revokeObjectURL(s.url));
+      return [];
+    });
+  }, []);
 
   return (
-    <div className="measurement-page" style={{ margin: '40px 0' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '40px' }}>智能尺寸测量</h1>
+    <div className="app">
+      <Navbar />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', alignItems: 'center' }} className="grid grid-cols-2">
-        {/* 左侧：摄像头显示 */}
-        <motion.div 
-          className="card"
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div style={{ position: 'relative', aspectRatio: '16/9', backgroundColor: '#000', borderRadius: '8px', overflow: 'hidden' }}>
-            {isCameraActive ? (
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                style={{ width: '100%', height: '100%' }}
-              />
-            ) : (
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                height: '100%', 
-                color: '#fff' 
-              }}>
-                摄像头未激活
-              </div>
-            )}
-            
-            {/* 加载动画 */}
-            {loading && (
-              <div style={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                right: 0, 
-                bottom: 0, 
-                backgroundColor: 'rgba(0, 0, 0, 0.7)', 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center' 
-              }}>
-                <div className="loading-spinner"></div>
-              </div>
-            )}
-            
-            {/* 步骤提示 */}
-            {step === 2 && !referenceDetected && (
-              <div style={{ 
-                position: 'absolute', 
-                bottom: 0, 
-                left: 0, 
-                right: 0, 
-                backgroundColor: 'rgba(0, 0, 0, 0.7)', 
-                color: '#fff', 
-                padding: '16px', 
-                textAlign: 'center' 
-              }}>
-                请将A4纸、身份证或银行卡贴近胸前，确保清晰可见
-              </div>
-            )}
-            
-            {step === 3 && (
-              <div style={{ 
-                position: 'absolute', 
-                bottom: 0, 
-                left: 0, 
-                right: 0, 
-                backgroundColor: 'rgba(0, 0, 0, 0.7)', 
-                color: '#fff', 
-                padding: '16px', 
-                textAlign: 'center' 
-              }}>
-                请保持自然站姿，微微张开双臂
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* 右侧：控制面板 */}
-        <motion.div 
-          className="card"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <h2 style={{ marginBottom: '30px' }}>测量控制</h2>
-          
-          {step === 1 && (
-            <div>
-              <h3>准备阶段</h3>
-              <p style={{ marginBottom: '20px', color: '#666' }}>请确保您有以下物品：</p>
-              <ul style={{ listStyle: 'disc', paddingLeft: '20px', marginBottom: '30px', color: '#666' }}>
-                <li>一台带有摄像头的设备</li>
-                <li>A4纸、身份证或银行卡作为参照物</li>
-                <li>充足的光线条件</li>
-                <li>简洁的背景环境</li>
-              </ul>
-              <button 
-                className="btn btn-primary" 
-                onClick={startCamera}
-                style={{ width: '100%', marginBottom: '16px' }}
-              >
-                启动摄像头
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => navigate('/')}
-                style={{ width: '100%' }}
-              >
-                返回首页
-              </button>
-            </div>
-          )}
-          
-          {step === 2 && (
-            <div>
-              <h3>校准阶段</h3>
-              <p style={{ marginBottom: '20px', color: '#666' }}>请将参照物贴近胸前，确保清晰可见</p>
-              {referenceType && (
-                <div className="success-message" style={{ marginBottom: '20px' }}>
-                  已检测到 {referenceType} 参照物
-                </div>
-              )}
-              <button 
-                className="btn btn-primary" 
-                onClick={detectReference}
-                disabled={loading}
-                style={{ width: '100%', marginBottom: '16px' }}
-              >
-                {loading ? '检测中...' : '开始检测参照物'}
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={stopCamera}
-                style={{ width: '100%' }}
-              >
-                关闭摄像头
-              </button>
-            </div>
-          )}
-          
-          {step === 3 && (
-            <div>
-              <h3>测量阶段</h3>
-              <p style={{ marginBottom: '20px', color: '#666' }}>请保持自然站姿，微微张开双臂</p>
-              <div className="success-message" style={{ marginBottom: '20px' }}>
-                校准成功！参照物：{referenceType}
-              </div>
-              <button 
-                className="btn btn-primary" 
-                onClick={startMeasurement}
-                disabled={loading}
-                style={{ width: '100%', marginBottom: '16px' }}
-              >
-                {loading ? '测量中...' : '开始测量'}
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={recalibrate}
-                style={{ width: '100%', marginBottom: '16px' }}
-              >
-                重新校准
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={stopCamera}
-                style={{ width: '100%' }}
-              >
-                关闭摄像头
-              </button>
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* 测量步骤指示器 */}
-      <div style={{ marginTop: '40px', textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '10px' }}>
-          {[1, 2, 3].map((stepNum) => (
-            <div 
-              key={stepNum}
-              style={{
-                width: '100px',
-                height: '4px',
-                backgroundColor: stepNum <= step ? '#4CAF50' : '#ddd',
-                borderRadius: '2px',
-                transition: 'background-color 0.3s ease'
-              }}
-            ></div>
-          ))}
+      <main className="main">
+        <div className="stage">
+          <CameraStage shots={shots} addShot={addShot} resetShots={resetShots} />
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '40px' }}>
-          <span style={{ color: step === 1 ? '#4CAF50' : '#666', fontWeight: step === 1 ? 'bold' : 'normal' }}>准备</span>
-          <span style={{ color: step === 2 ? '#4CAF50' : '#666', fontWeight: step === 2 ? 'bold' : 'normal' }}>校准</span>
-          <span style={{ color: step === 3 ? '#4CAF50' : '#666', fontWeight: step === 3 ? 'bold' : 'normal' }}>测量</span>
-        </div>
-      </div>
+        <aside className="side">
+          <MeasurementPanel shots={shots} resetShots={resetShots} />
+        </aside>
+      </main>
     </div>
-  )
+  );
 }
 
-export default MeasurementPage
+/* ─────────────────────────── CameraStage ─────────────────────────── */
+
+function CameraStage({ shots, addShot, resetShots }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [error, setError] = useState(null);
+
+  // Start / stop webcam on mount / unmount
+  useEffect(() => {
+    let cancelled = false;
+    const start = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 1280, height: 720 },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      } catch (e) {
+        setError(e.message || '无法访问摄像头');
+      }
+    };
+    start();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  const capture = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const idx = shots.length;
+      const url = URL.createObjectURL(blob);
+      const file = new File([blob], `shot-${idx}.jpg`, { type: 'image/jpeg' });
+      addShot({ label: SHOT_LABELS[idx], file, url });
+    }, 'image/jpeg', 0.92);
+  }, [shots.length, addShot]);
+
+  const retake = useCallback(() => {
+    resetShots();
+  }, [resetShots]);
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: '#000' }}>
+      {error ? (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+          color: '#fca5a5', fontSize: 14, padding: 20, textAlign: 'center',
+        }}>
+          摄像头错误：{error}
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      )}
+
+      {shots.length < MAX_SHOTS && !error && (
+        <button
+          type="button"
+          className="capture-btn"
+          onClick={capture}
+        >
+          📸 拍照 ({shots.length + 1}/{MAX_SHOTS})
+        </button>
+      )}
+
+      {shots.length === MAX_SHOTS && (
+        <button
+          type="button"
+          className="retake-btn"
+          onClick={retake}
+        >
+          重新拍摄
+        </button>
+      )}
+
+      {shots.length > 0 && (
+        <div className="shot-thumbs">
+          {shots.map((s, i) => (
+            <img
+              key={i}
+              className="shot-thumb"
+              src={s.url}
+              alt={s.label}
+              title={s.label}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────────── MeasurementPanel ───────────────────────── */
+
+function MeasurementPanel({ shots, resetShots }) {
+  const [phase, setPhase] = useState('idle'); // idle | uploading | measuring | done | error
+  const [progress, setProgress] = useState({ uploaded: 0, total: 0 });
+  const [result, setResult] = useState(null); // { height, chest, waist, hips }
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Reset to idle if shots were cleared (e.g. user hit "重新拍摄" then idle again)
+  useEffect(() => {
+    if (phase === 'done' && shots.length === 0) {
+      setPhase('idle');
+      setResult(null);
+    }
+  }, [shots.length, phase]);
+
+  const startMeasure = useCallback(async () => {
+    if (shots.length === 0) return;
+
+    setPhase('uploading');
+    setErrorMsg('');
+    setProgress({ uploaded: 0, total: shots.length });
+
+    // 1. Sequential upload
+    const uploadIds = [];
+    for (let i = 0; i < shots.length; i++) {
+      try {
+        const r = await uploadsApi.create(shots[i].file);
+        uploadIds.push(r.id);
+        setProgress({ uploaded: i + 1, total: shots.length });
+      } catch (e) {
+        setPhase('error');
+        setErrorMsg(`上传失败 (${i + 1}/${shots.length}): ${e.message || e}`);
+        return;
+      }
+    }
+
+    // 2. Trigger measurement
+    setPhase('measuring');
+    // TODO: replace mock with real POST /api/measurements
+    // const session = await measurementsApi.create({ upload_ids: uploadIds });
+    // const sessionId = session.id;
+    const sessionId = 'mock-' + Date.now();
+    const mockResult = { height: 172, chest: 92, waist: 76, hips: 96 };
+
+    // 3. Poll every 2s until done
+    const poll = setInterval(async () => {
+      try {
+        // TODO: replace mock with real GET /api/measurements/{id}
+        // const r = await measurementsApi.get(sessionId);
+        // if (r.status === 'done') { ... }
+        // Simulated: complete after first poll
+        clearInterval(poll);
+        setResult(mockResult);
+        setPhase('done');
+      } catch (e) {
+        clearInterval(poll);
+        setPhase('error');
+        setErrorMsg(`轮询失败: ${e.message || e}`);
+      }
+    }, 2000);
+  }, [shots]);
+
+  const reset = () => {
+    setPhase('idle');
+    setResult(null);
+    setErrorMsg('');
+    setProgress({ uploaded: 0, total: 0 });
+    resetShots();
+  };
+
+  return (
+    <div className="panel">
+      <h3>人体测量</h3>
+
+      {phase === 'idle' && (
+        <>
+          <p className="muted">点击拍照开始 · 已拍 {shots.length}/{MAX_SHOTS}</p>
+          {shots.length > 0 && shots.length < MAX_SHOTS && (
+            <p className="muted">提示：还差 {MAX_SHOTS - shots.length} 张（{SHOT_LABELS[shots.length]}）</p>
+          )}
+          <div className="row">
+            <button
+              className="apply"
+              style={{ flex: 1, padding: '8px 12px' }}
+              onClick={startMeasure}
+              disabled={shots.length === 0}
+            >
+              开始测量
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === 'uploading' && (
+        <div className="row">
+          <span className="spinner" />
+          <span className="muted">
+            上传中... {progress.uploaded}/{progress.total}
+          </span>
+        </div>
+      )}
+
+      {phase === 'measuring' && (
+        <div className="row">
+          <span className="spinner" />
+          <span className="muted">测量中...（约10秒）</span>
+        </div>
+      )}
+
+      {phase === 'done' && result && (
+        <>
+          <div className="measure-cards">
+            <MeasureCard label="身高" value={result.height} />
+            <MeasureCard label="胸围" value={result.chest} />
+            <MeasureCard label="腰围" value={result.waist} />
+            <MeasureCard label="臀围" value={result.hips} />
+          </div>
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="apply" onClick={reset} style={{ flex: 1 }}>
+              重新测量
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === 'error' && (
+        <>
+          <p className="err">错误：{errorMsg}</p>
+          <div className="row">
+            <button className="apply" onClick={reset} style={{ flex: 1 }}>
+              重试
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MeasureCard({ label, value }) {
+  return (
+    <div className="measure-card">
+      <div className="measure-label">{label}</div>
+      <div className="measure-value">
+        {value}
+        <span> cm</span>
+      </div>
+    </div>
+  );
+}
