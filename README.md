@@ -1,309 +1,69 @@
-# FitScan - 智能人体尺寸估算系统
+# FitScan — 3D 虚拟试衣系统
 
 ## 项目简介
-FitScan 是一个基于单目视觉与参照物校准的智能人体尺寸估算系统，利用普通摄像头和已知尺寸的参照物（如 A4 纸、银行卡）来快速测量人体尺寸并推荐服装尺码。
 
-## 核心功能
-- **实时视频采集**：使用 OpenCV 调用摄像头，支持多种分辨率设置
-- **参照物检测**：自动识别 A4 纸、身份证或银行卡，计算像素与真实长度的比例系数
-- **人体关键点提取**：使用 MediaPipe Pose 提取 33 个人体关键点
-- **尺寸计算**：肩宽、臂长、腿长、身高、胸围、腰围、臀围
-- **体型分析**：雷达图可视化展示人体体型轮廓
-- **尺码推荐**：根据测量结果推荐服装尺码（宽松版/修身版）
-- **AR 可视化**：实时显示测量数据和骨架，提供直观反馈
+上传照片 → 3D 人体重建 → 虚拟试衣
 
-## 技术架构
+## 系统架构
 
-### 模块化设计
 ```
-FitScan/
-├── main/                        # 应用代码核心区
-│   ├── main.py                  # 主程序入口
-│   ├── geometry_calculator.py   # 几何计算模块
-│   ├── size_recommender.py      # 尺码推荐模块
-│   ├── visualizer.py            # 可视化模块
-│   ├── src/                     # 核心功能模块
-│   │   ├── core/                # 核心算法
-│   │   │   ├── reference_detector.py    # 参照物检测
-│   │   │   ├── pose_estimator.py        # 姿态估计
-│   │   │   ├── geometry_calculator.py   # 几何计算
-│   │   │   └── size_recommender.py      # 尺码推荐
-│   │   ├── utils/               # 工具模块
-│   │   │   ├── visualizer.py            # 可视化
-│   │   │   └── video_capture.py         # 视频采集
-│   │   └── config/              # 配置模块
-│   │       └── config.py               # 系统配置
-│   └── tests/                   # 测试目录
-├── sdkconfig/                   # 编译配置区
-│   ├── requirements.txt         # 依赖管理
-│   ├── requirements_optimized.txt # 优化版依赖
-│   ├── run.bat                  # Windows启动脚本
-│   ├── run.sh                   # Linux/macOS启动脚本
-│   └── OPTIMIZATION_GUIDE.md    # 优化指南
-├── videos/                      # 非代码资源区
-│   ├── test_a4.jpg              # 测试用A4纸图片
-│   ├── test_result.jpg          # 测试结果图片
-│   ├── test_full_output.txt     # 完整测试输出
-│   └── test_output.txt          # 测试输出
-├── data/                        # 数据目录
-├── backend/                     # 后端API服务
-├── frontend/                    # 前端应用
-├── pytest_display.py            # 测试脚本
-├── CMakeLists.txt               # 编译配置文件
-└── README.md                    # 项目文档
+Frontend (React + Three.js)
+        │
+        │ HTTP
+        ▼
+Backend (FastAPI + SQLite)
+        │
+        │ Task Queue
+        ▼
+AI Server (4×RTX 3090, SMPLer-X)
+        │
+        │ Shared Storage
+        ▼
+/ai_storage/recon/{id}/model.glb
 ```
 
-### 核心模块说明
+## 快速启动
 
-#### 1. 参照物检测器 (ReferenceDetector)
-- 使用 OpenCV 边缘检测和轮廓识别
-- 支持 A4 纸（21cm）、身份证（8.56cm）、银行卡（8.56cm）
-- 自动计算比例系数（cm/像素）
-- 使用 minAreaRect 精确检测参照物短边
+### 前端
 
-#### 2. 姿态估计器 (PoseEstimator)
-- 基于 MediaPipe Pose
-- 提取 33 个人体关键点
-- 应用移动平均滤波减少抖动
-
-#### 3. 几何计算器 (GeometryCalculator)
-- 计算关键点间的欧氏距离
-- 结合比例系数转换为真实尺寸
-- 使用经验公式估算围度（胸围、腰围、臀围）
-- 区分直接测量项与估算项
-
-#### 4. 尺码推荐器 (SizeRecommender)
-- 基于预设尺码表
-- 综合考虑胸围、肩宽、身高、腰围、臀围
-- 智能匹配最佳尺码
-- 支持宽松版/修身版推荐
-
-#### 5. 可视化器 (Visualizer)
-- 实时显示测量数据
-- 绘制测量线和骨架
-- 雷达图展示体型分析
-- 提供直观的用户界面
-
-## 快速开始
-
-### 环境要求
-- Python 3.7+
-- 摄像头设备
-- A4 纸/身份证/银行卡（作为参照物）
-
-### 安装依赖
 ```bash
-pip install -r sdkconfig/requirements.txt
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
 ```
 
-### 运行程序
+### 后端
+
 ```bash
-python main/main.py
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-### 使用步骤
-1. 启动程序后，将 A4 纸、身份证或银行卡贴近胸前
-2. 系统自动检测参照物并完成校准
-3. 站在摄像头前，保持自然站姿，微微张开双臂
-4. 系统实时显示测量数据和推荐尺码
-5. 按 `s` 锁定当前结果并生成尺码建议
-6. 按 `r` 重新校准，按 `c` 返回扫描模式，按 `q` 退出
+### AI Server
 
-## 配置说明
-
-在 `main/src/config/config.py` 中可以调整以下参数：
-
-### 摄像头设置
-```python
-CAMERA_ID = 0              # 摄像头 ID
-CAMERA_WIDTH = 1280        # 画面宽度
-CAMERA_HEIGHT = 720        # 画面高度
-CAMERA_FPS = 30            # 帧率
+```bash
+cd ai_server
+python worker.py
 ```
 
-### MediaPipe 设置
-```python
-POSE_MIN_DETECTION_CONFIDENCE = 0.7   # 最小检测置信度
-POSE_MIN_TRACKING_CONFIDENCE = 0.7    # 最小跟踪置信度
-```
+## 页面说明
 
-### 参照物设置
-```python
-REFERENCE_OBJECTS = {
-    "A4": {"width": 21.0, "height": 29.7, ...},      # A4 纸配置
-    "ID_CARD": {"width": 8.56, "height": 5.398, ...}  # 身份证配置
-    "BANK_CARD": {"width": 8.56, "height": 5.398, ...} # 银行卡配置
-}
-```
+- `/virtual-tryon` — 上传照片 → 触发重建 → 3D Avatar → 虚拟换衣
+- `/measure` — 摄像头拍照 → 上传 → 返回身高 / 胸围 / 腰围 / 臀围
 
-### 尺码表
-```python
-SIZE_RULES = {
-    "S": {"height": (155, 170), "chest": (84, 92), "waist": (70, 78), ...},
-    "M": {"height": (160, 175), "chest": (90, 98), "waist": (76, 84), ...},
-    # ...
-}
-```
+## 当前进度
 
-## 技术原理
+| 阶段 | 状态 | 内容 |
+|------|------|------|
+| Phase A–F | ✅ 完成 | pipeline、重建、资产注册 |
+| Phase G | ✅ 完成 | UI 整合、摄像头、导航、错误边界 |
+| Phase H | 🔲 待办 | ClothingOverlay 接入真实 GLB |
+| Phase I | 🔲 待办 | 真实 SMPLer-X、ECharts Dashboard |
 
-### 1. 比例系数计算
-```
-真实长度 = 像素长度 × 比例系数 (K)
-K = 参照物真实宽度 / 参照物像素宽度
-```
+## 技术栈
 
-### 2. 人体关键点
-MediaPipe Pose 提供 33 个关键点：
-- 点 0：鼻尖（用于身高计算）
-- 点 11-12：左右肩（用于肩宽）
-- 点 13-16：左右肘和手腕（用于臂长）
-- 点 23-28：左右髋、膝、踝（用于腿长）
-
-### 3. 尺寸计算公式
-- **肩宽**：左右肩点距离 × K
-- **臂长**：(肩膀→手肘 + 手肘→手腕) × K
-- **腿长**：(髋部→膝盖 + 膝盖→脚踝) × K
-- **身高**：(鼻尖→脚踝垂直距离) × K × 校正因子
-- **胸围**：肩宽 × 1.1 × 1.1π（椭圆拟合法）
-- **腰围**：肩宽 × 0.65 × π × 1.1
-- **臀围**：臀宽 × π × 1.2
-
-### 4. 体型分析（雷达图）
-雷达图展示 5 个关键维度：
-- 身高（150-180cm 范围）
-- 肩宽（35-55cm 范围）
-- 胸围（75-120cm 范围）
-- 腰围（60-100cm 范围）
-- 臀围（80-120cm 范围）
-
-### 5. 尺码推荐算法
-基于多维度评分系统：
-- 身高匹配度
-- 胸围匹配度
-- 腰围匹配度
-- 臀围匹配度
-- 肩宽匹配度
-
-推荐输出格式：`L（宽松版）/ XL（修身版）`
-
-## 操作说明
-
-### 按键控制
-| 按键 | 功能 |
-|------|------|
-| `q` | 退出程序 |
-| `r` | 重新校准（回到参照物检测） |
-| `s` | 锁定当前测量结果并生成尺码建议 |
-| `c` | 返回扫描模式（重新测量） |
-| `p` | 切换窗口大小锁定状态 |
-
-### 使用流程
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Step 1     │  →  │  Step 2     │  →  │  Step 3     │
-│  校准中     │     │  扫描中     │     │  尺码推荐   │
-│  (按 r 重置)  │     │  (按 s 锁定)  │     │  (按 c 重测)  │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-## 注意事项
-
-### 使用环境
-- 确保光线充足，避免背光
-- 背景尽量简洁，避免复杂图案
-- 摄像头与身体保持适当距离（1-2 米）
-
-### 测量姿势
-- 参照物应与身体测量部位在同一平面
-- 保持自然站姿，双脚并拢
-- 身体正对摄像头，避免侧身
-- 微微张开双臂，便于 MediaPipe 检测
-
-### 精度优化
-- 多次测量取平均值
-- 定期重新校准
-- 使用较大尺寸的参照物（A4 纸优于银行卡）
-
-## 系统要求
-
-### 硬件要求
-- 摄像头：普通网络摄像头或手机摄像头
-- 处理器：支持基本图形处理能力
-- 内存：建议 4GB 以上
-
-### 软件要求
-- 操作系统：Windows / macOS / Linux
-- Python：3.7 或更高版本
-
-## 性能指标
-
-### 测量精度
-- 肩宽：±2cm
-- 臂长：±3cm
-- 腿长：±3cm
-- 身高：±5cm（估算）
-- 胸围：±5cm（估算）
-- 腰围：±4cm（估算）
-- 臀围：±5cm（估算）
-
-### 处理性能
-- 帧率：30 FPS
-- 响应时间：<100ms
-- 内存占用：<500MB
-
-## 未来扩展
-
-### 功能扩展
-- 支持更多参照物类型（护照、A3 纸等）
-- 优化围度估算算法（深度学习模型）
-- 添加数据存储和历史记录功能
-- 支持多用户管理
-
-### 技术优化
-- 深度学习模型优化
-- 边缘计算支持
-- 移动端应用开发
-- 云端数据同步
-
-## 常见问题
-
-### Q: 摄像头无法打开？
-A: 检查摄像头驱动，确认摄像头权限，尝试更换 CAMERA_ID。
-
-### Q: 参照物检测失败？
-A: 确保光线充足，参照物清晰可见，避免背景干扰。尽量使用 A4 纸而非银行卡。
-
-### Q: 测量结果不准确？
-A: 重新校准，调整参照物位置，确保与身体在同一平面。检查光线条件。
-
-### Q: 姿态检测不稳定？
-A: 改善光线条件，调整摄像头角度，保持稳定站姿，微微张开双臂。
-
-### Q: 身高估算偏大/偏小？
-A: 身高是通过鼻尖到脚踝的距离估算的，校正因子已优化。如仍有偏差，可在 config.py 中调整 HEIGHT_CORRECTION_FACTOR。
-
-## 技术支持
-
-### 依赖库
-- OpenCV：https://opencv.org/
-- MediaPipe：https://google.github.io/mediapipe/
-- NumPy：https://numpy.org/
-
-### 问题反馈
-如遇到问题，请检查：
-1. 依赖库是否正确安装
-2. 摄像头是否正常工作
-3. 配置参数是否合理
-
-## 许可证
-MIT License
-
-## 致谢
-- Google MediaPipe 团队
-- OpenCV 社区
-- 所有贡献者
-
----
-
-**FitScan - 让服装尺码选择更简单！**
+- **Frontend**: React 18, Three.js, @react-three/fiber, @react-three/drei, Vite
+- **Backend**: FastAPI, SQLite, Python 3.10+
+- **AI**: SMPLer-X, PyTorch, CUDA
