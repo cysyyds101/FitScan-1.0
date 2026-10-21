@@ -41,19 +41,35 @@ export async function isValidGLB(url) {
       return false;
     }
     const buf = await r.arrayBuffer();
-    const view = new Uint8Array(buf, 0, 4);
-    const magic = String.fromCharCode(view[0], view[1], view[2], view[3]);
-    const ok = magic === 'glTF';
+    const ok = validateGLBBuffer(buf);
     _validityCache.set(url, ok);
     if (!ok) {
       // eslint-disable-next-line no-console
-      console.warn(`[GLBLoader] ${url} magic="${magic}" (expected "glTF"), falling back to procedural`);
+      console.warn(`[GLBLoader] ${url} is not a loadable GLB, falling back to procedural`);
     }
     return ok;
   } catch (e) {
     _validityCache.set(url, false);
     return false;
   }
+}
+
+/**
+ * A GLB is a 12-byte header (magic "glTF", version, totalLength) followed by chunks.
+ * Checking the magic alone is not enough: 12-byte stubs that declare totalLength=0
+ * passed validation and then rendered nothing, which made the procedural fallback
+ * look like a working 3D garment.
+ */
+export function validateGLBBuffer(buf) {
+  if (!buf || buf.byteLength < 12) return false;
+  const view = new DataView(buf);
+  const magic = String.fromCharCode(
+    view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3),
+  );
+  if (magic !== 'glTF') return false;
+  if (view.getUint32(4, true) !== 2) return false;
+  const totalLength = view.getUint32(8, true);
+  return totalLength >= 12 && totalLength === buf.byteLength;
 }
 
 /**

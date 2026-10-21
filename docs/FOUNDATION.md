@@ -48,20 +48,22 @@ Intel RealSense **SR300**。三个硬限制：
 | `SMPLer-X/`（286MB） | **只有代码，零个权重文件**（无 .pth/.ckpt） | 什么都做不了 | 需要 3 份官方 checkpoint + SMPL 模型 |
 | SMPL 身体模型 | **全仓库不存在**（`*.pkl` / `basicModel*` 搜索结果为空） | — | 没有它，任何姿态估计都无法解码成人体网格 |
 
-### 2.4 服装资产 —— 这是最被高估的一项
+### 2.4 服装资产 —— 盘出来是零
 
-数据库 `clothing` 表有 **8 行**，看起来像个目录。实际情况：
+数据库 `clothing` 表有 **8 行**，看起来像个目录。逐文件哈希+十六进制头核对后：
 
 ```
-c01  T-Shirt       → /static/models/clothing_01.glb   ┐ 同一文件
-c03  Hoodie        → /static/models/clothing_01.glb   ┘ ← 假目录项
-c02  Vest          → /static/models/clothing_02.glb
-usr-*  ×5          → 测试夹具（Test Jacket / H1 Smoke Jacket / Spec Jacket ×2）
+c01  T-Shirt       → clothing_01.glb   ┐ 同一文件
+c03  Hoodie        → clothing_01.glb   ┘ ← 假目录项
+c02  Vest          → clothing_02.glb
+usr-*  ×5          → 12 字节空壳（GLB 头声明 totalLength=0）
 ```
 
-**真实可用的 3D 服装只有 2 件。** 而且 `c03 Hoodie` 指向的是 T 恤的文件——目录在骗人。
+而 `clothing_01.glb` / `clothing_02.glb` / `human.glb` 这三个"真模型"**开头不是 `glTF` 魔数**，`file(1)` 判为 `data`，three.js 无法解析；且三者**前 16 字节完全相同**。`ai_server/data/fixtures/sample.glb`（648B）是只声明了 asset 2.0 的**空场景**。
 
-同理，`reconstructions` 表 14 行，全部是 `ai_server/data/fixtures/sample.glb` 的副本（`worker_process.py:107` 是 mock）。**"3D 人体重建"目前没有任何一行是真的。**
+**有效 3D 模型：0 个。真实服装：0 件。** 应用里看到的体和衣，全是程序化兜底几何体。完整证据见 [`assets/CATALOG.md`](../assets/CATALOG.md)。
+
+同理，`reconstructions` 表 14 行全部是 `sample.glb` 的字节级副本（`worker_process.py:107` 是 mock）。**"3D 人体重建"没有任何一行是真的。**
 
 ---
 
@@ -71,7 +73,7 @@ usr-*  ×5          → 测试夹具（Test Jacket / H1 Smoke Jacket / Spec Jack
 |---|---|---|---|
 | **G-1** | 无 SMPL 身体模型 + 无任何可用的实时人体网格模型 | P-3「合身」无法实现；只能做"把预置 GLB 摆到固定位置" | SMPL/SMPL-X 模型需**机构授权申请**（非下载即用），周期以周计 |
 | **G-2** | 无 RGB 流 | P-1「在场感」实现不了，镜子是黑的 | 低——`capture.py` 加 color 流 + align，本仓库内可解 |
-| **G-3** | 服装库实际只有 2 件，且无绑定信息 | 换装演示 2 次就见底 | 中——每件服装要做打版/绑定，是**内容生产**不是写代码 |
+| **G-3** | 有效 3D 服装 **0 件**（8 行目录全指向空壳或非 GLB 文件） | 换装无从演示；当前画面是程序化几何体冒充 | 高——每件服装要建模+打版+绑定，是**内容生产**不是写代码 |
 | **G-4** | SR300 量程不足以拍全身 | 全身版产品形态不成立 | 高——要么换相机，要么把产品定义收窄到上半身 |
 
 **G-1 和 G-3 是"不能异想天开"的两个硬边界。** 在拿到身体模型授权、以及服装库扩到 10 件以上之前，本项目**不具备**对外宣称"AI 量体裁衣"的材料条件。
@@ -165,9 +167,19 @@ FitScan/
 
 ★ = 本次新增或重整。
 
-**根目录清理**（当前有 34 个根条目，其中 9 个是残渣）：
-`_chrome.err` `_dom.html` `commit_diff.txt` `backend_uvicorn.log` `logs/` `_tmp_assets/` `.chrome-verify{,2,3,4}/`（100MB）`src/`（只含一个 `downstream-browsers.json.md`）——全部删除或加入 `.gitignore`。
-`start-dev.sh`（根）与 `scripts/start_dev.sh` 重复，保留后者。`test_sr300.py` 移入 `scripts/`。
+**根目录清理**（2026-10-21 执行了一半，如实记录）：
+
+已做（都是 tracked 文件，`dd9349c` 可还原）：
+- 删 `src/`（只含一个 `downstream-browsers.json.md`）
+- 删 `start-dev.sh` 与 `scripts/start_dev.sh`（见下）
+- `test_sr300.py` → `scripts/test_sr300.py`
+- `_tmp_assets/cdp_shot.mjs` → `scripts/cdp_shot.mjs`（不依赖 puppeteer 的 CDP 截图工具，值得留，从被忽略的目录里救进版本库）
+
+**未做，等你点头**（这些是 gitignored 的，还原点保护不了，删了就是真没了；且 `.workbuddy-ai/memory/2026-10-12.md:53` 记录上次同类删除请求被你拒绝过）：
+`.chrome-verify{,2,3,4}/`（合计 100MB Chrome profile）、`_chrome.err`、`_dom.html`、`commit_diff.txt`、`backend_uvicorn.log`、`logs/`（空）、`_tmp_assets/`（已空）。
+它们已全部落在 `.gitignore` 内，不会污染提交，只占本地磁盘。
+
+**启动脚本**：`start-dev.sh`（根）与 `scripts/start_dev.sh` **不是重复品**，是两份不同的、且在这台机器上都跑不起来的脚本——前者调 `pip`/`uvicorn`（PATH 上没有），后者调 `conda run -n fitscan-capture`（该环境不存在）。两者已删除，统一为 **`scripts/dev.sh`**，只用绝对解释器路径 `.venv/Scripts/python.exe`。
 
 ---
 
@@ -228,6 +240,9 @@ FitScan/
 | D-12 | 🟡 中 | README 声称结果落在 `/ai_storage/recon/{id}/model.glb`，该路径全仓库不存在 | `README.md:22` |
 | D-13 | 🟢 低 | `STATUS.md` 停在 2026-06-16 且标 Phase B 为 next，实际已到 G | `STATUS.md:1` |
 | D-14 | 🟢 低 | 归一化逻辑两处重复实现 | `AvatarEntity.jsx:45` / `HumanModel.jsx:85` |
+| D-15 | 🔴 阻断 | **项目里没有任何有效 3D 模型**：三个"模型"文件缺 `glTF` 魔数且前 16 字节相同，八个是 `totalLength=0` 的空壳 | 见 `assets/CATALOG.md` §1 |
+| D-16 | 🟠 高 | `isValidGLB` 只校验 4 字节魔数 → 空壳被判合法、SP-4/SP-5 断言的是文件头而非模型；**本次已修为魔数+版本+totalLength 三项** | `core/GLBLoader.js:34-70` |
+| D-17 | 🟢 低 | 两份启动脚本互相冲突且都跑不起来（调 PATH 上不存在的 `pip`/`conda`）；**本次已合并为 `scripts/dev.sh`** | `start-dev.sh`、`scripts/start_dev.sh` |
 
 ---
 
@@ -244,7 +259,9 @@ FitScan/
 | **松量与版型偏好** | 同一个三围，不同人想要的合身度不同，这是数据问题不是算法问题 | ❌ 不做推荐算法。只报数字，不替用户判断"合不合身" |
 | **镜面视差 / 半反半透光损** | 光学几何限制，算法补不了 | ❌ 不做光学补偿。治具设计上规避（相机贴近屏幕中心） |
 
-**范围红线（一句话版）**：v1 = **上半身 + 2 件真服装 + 深度定尺度 + 预烘焙形变 + 站定后出图**。超出这个范围的功能，一律先写进 §8 讨论，不许直接开工。
+**范围红线（一句话版）**：v1 = **上半身 + 深度定尺度 + 预烘焙形变 + 站定后出图**。超出这个范围的功能，一律先写进 §8 讨论，不许直接开工。
+
+**并且要说清楚**：服装资产（≥10 件带绑定的真 GLB）是 v1 的**前置条件**，不是 v1 的**成果**。当前是 0 件（D-15），所以 v1 的实际开工闸门在 §11 的 D-B，不在代码里。
 
 ---
 
@@ -284,13 +301,22 @@ FitScan/
 ## 11. 下一步（按依赖排序）
 
 ```
+已完成（2026-10-21）
+  T001  恢复 ai_server/queue/，SP-1 全绿
+  T002  capture/requirements.txt 补 numpy + opencv
+  T006  MeasurementPage useMeasurement 单例化
+  T008  新帧协议（40B 定长头），双端逐字节验证
+  T013  assets/CATALOG.md 素材台账 —— 盘出有效 3D 模型为 0（D-15）
+  T014  根目录清理 + scripts/dev.sh 统一入口 + isValidGLB 补长度校验（D-16/D-17）
+  —     .venv 环境建立、依赖钉死、踩坑写进 scripts/setup_mirror_env.sh
+  —     还原点 commit dd9349c
+
 立即可做（不依赖硬件）
   T003  修 SmplFastRequest 缺字段，接回回调链        ai_server/api.py
   T004  三端迁移到新帧协议（--simulate 可验证）      capture.py / camera_ws.py / useCameraStream.js
   T005  随 T004 一并解决 stale closure
-  T013  建 assets/CATALOG.md，揪出 c03 假目录项       assets/
-  T014  根目录清理 + .gitignore 收口
   T012  tests/sp8_smoke.py（协议 + 合成帧往返）
+  T017  清 DB 假目录（c03 重复项 + 8 个空壳行），改为从 CATALOG.md 生成
 
 插上 SR300 之后
   T007  RGB-D 对齐采集 + 设备真实内参                mirror/capture_rt.py
@@ -298,11 +324,12 @@ FitScan/
   T010  motion-to-photon 打点                        mirror/latency.py
   T015  F-02 / F-04 实测，出数字
 
-需要外部决策（不是写代码）
+需要外部决策（不是写代码能解决的）
   D-A   申请 SMPL / SMPL-X 模型授权（解 G-1）        ← 周期以周计，越早越好
-  D-B   服装资产从哪来：买 / 做 / 换 2D 试衣路线（解 G-3）
+  D-B   服装 3D 资产从哪来：买 / 打版 / 开源库 / 改走 2D 试衣（解 G-3）
+        ★ v1 的真闸门。当前 0 件，代码写到天黑也没有衣服可试。
   D-C   换相机 或 正式接受"只做上半身"（解 G-4）
-  D-D   §10 的 8 条冲突逐条拍板
+  D-D   §10 的 8 条 SPEC 冲突逐条拍板
 ```
 
-**D-A 到 D-C 是本项目当前真正的瓶颈。** 代码层面我能继续推，但 P-3「合身」在拿到身体模型之前做不出来，服装库只有 2 件这件事我也写不出第 3 件衣服。
+**D-A 到 D-C 是本项目当前真正的瓶颈。** 代码层面我能继续推，但两件事不写代码就没有：P-3「合身」在拿到身体模型授权之前做不出来（G-1），换装在有效服装为 0 件之前无从演示（G-3）。
