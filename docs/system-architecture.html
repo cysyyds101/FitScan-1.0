@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitScan System Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 40px;
+    font-size: 14px;
+  }
+
+  .diagram {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+
+  .machine {
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #334155;
+  }
+
+  .machine-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #334155;
+  }
+
+  .machine-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .dev-machine .machine-icon { background: #1d4ed8; }
+  .ai-server .machine-icon { background: #7c3aed; }
+  .hardware-label { background: #475569; font-size: 10px; padding: 2px 8px; border-radius: 4px; color: #cbd5e1; margin-left: auto; }
+
+  .machine-title { font-size: 16px; font-weight: 600; }
+  .machine-sub { font-size: 12px; color: #94a3b8; }
+
+  .component {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+  }
+
+  .component:hover { border-color: #60a5fa; }
+
+  .component-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 4px;
+  }
+
+  .component-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+
+  .component-desc {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-weight: 600;
+  }
+  .badge-local { background: #166534; color: #86efac; }
+  .badge-remote { background: #7c3aed; color: #c4b5fd; }
+  .badge-ws { background: #1d4ed8; color: #93c5fd; }
+  .badge-http { background: #92400e; color: #fcd34d; }
+
+  .flow {
+    margin-top: 24px;
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid #334155;
+  }
+
+  .flow-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .flow-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-ws { background: #60a5fa; }
+  .dot-http { background: #f59e0b; }
+  .dot-usb { background: #34d399; }
+
+  .flow-label { font-family: monospace; background: #1e293b; padding: 2px 8px; border-radius: 4px; color: #e2e8f0; font-size: 11px; }
+
+  .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .pipeline {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .pipeline-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .pipeline-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+  }
+
+  .step-box {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 12px 16px;
+    text-align: center;
+    min-width: 140px;
+  }
+
+  .step-name { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+  .step-loc { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .step-time { font-size: 10px; color: #475569; margin-top: 4px; }
+
+  .arrow {
+    color: #475569;
+    font-size: 20px;
+    padding: 0 8px;
+  }
+
+  .constraints {
+    grid-column: 1 / -1;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .constraints-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .constraints-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .constraint {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    color: #cbd5e1;
+  }
+
+  .c-icon { color: #34d399; font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .c-icon-x { color: #f87171; font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+  .note {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #475569;
+    font-size: 12px;
+    margin-top: 16px;
+    padding: 12px;
+    background: #0f172a;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+  }
+</style>
+</head>
+<body>
+
+<h1>FitScan 系统架构</h1>
+<p class="subtitle">Monolith FastAPI + React + 4×3090 AI Server · 2026-06-15</p>
+
+<div class="diagram">
+
+  <!-- Dev Machine -->
+  <div class="machine dev-machine">
+    <div class="machine-header">
+      <div class="machine-icon">💻</div>
+      <div>
+        <div class="machine-title">开发机（无 GPU）</div>
+        <div class="machine-sub">笔记本 · Windows/macOS</div>
+      </div>
+      <div class="hardware-label">本地运行</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Frontend</div>
+      <div class="component-name">React + Vite</div>
+      <div class="component-desc">3D 渲染（Three.js / R3F）、UI 面板、状态管理</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Backend</div>
+      <div class="component-name">FastAPI <span class="badge badge-local">Monolith</span></div>
+      <div class="component-desc">REST API、WebSocket 中继、业务逻辑、SQLite 存储</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Hardware</div>
+      <div class="component-name">Intel RealSense SR300 <span class="badge badge-ws">USB</span></div>
+      <div class="component-desc">深度摄像头，提供实时 RGBD 数据流</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Capture Script</div>
+      <div class="component-name">capture.py <span class="badge badge-ws">WS :8765</span></div>
+      <div class="component-desc">Python 独立脚本，读取 RealSense 帧，通过 WebSocket 广播。<br>无 RealSense 时自动回退到模拟数据。</div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-title">Data Flows</div>
+      <div class="flow-row"><div class="flow-dot dot-usb"></div>RealSense → capture.py（深度帧二进制）</div>
+      <div class="flow-row"><div class="flow-dot dot-ws"></div>FastAPI /ws/camera → Browser（实时流中继）</div>
+      <div class="flow-row"><div class="flow-dot dot-http"></div>Browser → FastAPI → AI Server（HTTP REST）</div>
+    </div>
+  </div>
+
+  <!-- AI Server -->
+  <div class="machine ai-server">
+    <div class="machine-header">
+      <div class="machine-icon">🖥️</div>
+      <div>
+        <div class="machine-title">AI 服务器（4×3090）</div>
+        <div class="machine-sub">GPU 推理专用 · Linux</div>
+      </div>
+      <div class="hardware-label">远程推理</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Inference API</div>
+      <div class="component-name">FastAPI <span class="badge badge-remote">推理专用</span></div>
+      <div class="component-desc">只做 GPU 推理，无业务逻辑。接收 HTTP 请求，调用 PyTorch 模型，返回 JSON 结果。</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Model 1</div>
+      <div class="component-name">人体测量模型 <span class="badge badge-http">/infer/measure</span></div>
+      <div class="component-desc">输入深度数据 → 输出精确身体尺寸（肩宽、胸围、腰围、裤长等）</div>
+    </div>
+
+    <div class="component">
+      <div class="component-label">Model 2</div>
+      <div class="component-name">3D 模型生成 <span class="badge badge-http">/infer/generate</span></div>
+      <div class="component-desc">输入照片/扫描 → 输出 GLB 模型 URL。底层可用 Tripo3D / MNISTR3D 等。</div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-title">Access Pattern</div>
+      <div class="flow-row"><div class="flow-dot dot-http"></div>FastAPI monolith → POST /ai/measure（httpx 调用）</div>
+      <div class="flow-row"><div class="flow-dot dot-http"></div>FastAPI monolith → POST /ai/generate（httpx 调用）</div>
+      <div class="flow-row"><div class="flow-dot dot-http"></div>开发机无 GPU 依赖，所有推理远程完成 ✓</div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="full-width">
+    <div class="pipeline">
+      <div class="pipeline-title">Measurement Pipeline（测量流水线）</div>
+      <div class="pipeline-steps">
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">RealSense SR300</div>
+            <div class="step-loc">USB → 开发机</div>
+            <div class="step-time">30 FPS</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">capture.py</div>
+            <div class="step-loc">WS :8765</div>
+            <div class="step-time">二进制帧</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">FastAPI /ws/camera</div>
+            <div class="step-loc">WS 中继</div>
+            <div class="step-time">无修改</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">Browser</div>
+            <div class="step-loc">前端粗算</div>
+            <div class="step-time">3-5cm</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">POST /api/measurements</div>
+            <div class="step-loc">FastAPI</div>
+            <div class="step-time">存储</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">AI Server /infer/measure</div>
+            <div class="step-loc">4×3090</div>
+            <div class="step-time">亚厘米</div>
+          </div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="step">
+          <div class="step-box">
+            <div class="step-name">GET /measurements/{id}</div>
+            <div class="step-loc">前端展示</div>
+            <div class="step-time">精确结果</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Constraints -->
+  <div class="constraints">
+    <div class="constraints-title">架构约束检查</div>
+    <div class="constraints-grid">
+      <div class="constraint"><span class="c-icon">✓</span>单体 FastAPI（无微服务）</div>
+      <div class="constraint"><span class="c-icon">✓</span>PostgreSQL / SQLite 存储</div>
+      <div class="constraint"><span class="c-icon">✓</span>开发机无 GPU 依赖</div>
+      <div class="constraint"><span class="c-icon">✓</span>REST + WebSocket 通信</div>
+      <div class="constraint"><span class="c-icon">✓</span>MVP 可运行</div>
+      <div class="constraint"><span class="c-icon">✓</span>前端 3D 逻辑在 core/</div>
+      <div class="constraint"><span class="c-icon-x">✗</span>禁止 Celery / Redis / InfluxDB</div>
+      <div class="constraint"><span class="c-icon-x">✗</span>禁止微服务拆分</div>
+      <div class="constraint"><span class="c-icon-x">✗</span>禁止多数据库混用</div>
+    </div>
+  </div>
+
+</div>
+
+<p class="note">SPEC.md 定义完整架构，capture.py / FastAPI / AI Server 均按此设计实现。</p>
+
+</body>
+</html>

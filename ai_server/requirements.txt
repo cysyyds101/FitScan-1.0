@@ -1,0 +1,13 @@
+# AI Server Requirements
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+httpx>=0.27.0
+# GPU inference
+# torch>=2.0.0
+# transformers>=4.40.0
+# tripo3d (optional)
+numpy>=1.26.0
+# Image normalization (Phase C) — PIL only, no torch
+Pillow>=10.0.0

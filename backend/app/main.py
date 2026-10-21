@@ -10,22 +10,32 @@ from app.api.routes import ai_inference
 from app.api.routes import uploads
 from app.api.routes import reconstructions
 from app.api.routes import assets
+from app.api.routes import tryon_sessions
 from app.services.camera_ws import router as camera_ws_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MODELS_DIR = BASE_DIR / "frontend" / "public" / "models"
 DATA_DIR = BASE_DIR / "data"
 UPLOADS_STATIC_DIR = DATA_DIR / "uploads"
 RECON_STATIC_DIR = DATA_DIR / "reconstructions"
+CLOTHING_STATIC_DIR = DATA_DIR / "clothing"
 
 app = FastAPI(title="FitScan", version="0.2.0", description="Monolith FastAPI: clothing API + measurement + AI inference")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:8000",
+        "ws://localhost:5173",
+        "ws://localhost:5174",
+        "ws://localhost:8000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,6 +47,7 @@ app.include_router(uploads.router, prefix="/api", tags=["uploads"])
 app.include_router(reconstructions.router, prefix="/api", tags=["reconstructions"])
 app.include_router(assets.router, tags=["assets"])
 app.include_router(ai_inference.router, prefix="/api/ai", tags=["AI inference"])
+app.include_router(tryon_sessions.router, prefix="/api", tags=["tryon sessions"])
 app.include_router(camera_ws_router, prefix="/ws", tags=["camera"])
 
 # Static files (GLB models)
@@ -48,8 +59,9 @@ else:
 
 # Static files (Phase B: user uploads + reconstruction GLBs)
 for static_dir, mount_path in (
-    (UPLOADS_STATIC_DIR, "/static/uploads"),
-    (RECON_STATIC_DIR,   "/static/reconstructions"),
+    (UPLOADS_STATIC_DIR,  "/static/uploads"),
+    (RECON_STATIC_DIR,    "/static/reconstructions"),
+    (CLOTHING_STATIC_DIR, "/static/clothing"),
 ):
     if static_dir.exists():
         app.mount(mount_path, StaticFiles(directory=str(static_dir)), name=mount_path.strip("/").replace("/", "_"))

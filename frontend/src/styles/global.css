@@ -133,14 +133,30 @@ html, body, #root {
 .list { list-style: none; padding: 0; margin: 0; }
 .item {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 0;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  text-align: left;
+  border: none;
   border-bottom: 1px solid #1e293b;
+  cursor: pointer;
+}
+.item:hover { background: rgba(255, 255, 255, 0.05); }
+.item.active { background: rgba(34, 211, 238, 0.12); }
+.item.active .name { color: #22d3ee; }
+.item-main {
+  display: flex; align-items: center;
+  min-width: 0;
 }
 .dot {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
   margin-right: 8px;
+  background: #64748b;
+  flex-shrink: 0;
 }
 .name { font-size: 13px; color: #e2e8f0; }
 .meta { font-size: 11px; color: #475569; }

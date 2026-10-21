@@ -1,158 +1,50 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
-import * as THREE from 'three';
-import { SimpleCloth } from 'three-simplecloth';
+/**
+ * ClothPhysics.jsx — 伪布料（vertex offset）独立组件。
+ *
+ * 规则（Virtual Try-On Rule）：
+ *  - 禁止 full physics cloth engine
+ *  - 禁止 GPU compute shader cloth simulation
+ *  - 允许"伪布料"：vertex offset / 简化动画
+ *
+ * 实现：
+ *  - 用 R3F 的 useFrame 钩子，每帧对子节点的 group.position.y 加一个 sin 波偏移
+ *  - baseY = 用户/transform 指定的静态 Y，作为基准线
+ *  - amplitude / frequency 暴露为可调 prop（后续 ClothPhysicsController 可用）
+ *  - enabled=false 时直接渲染 children，不做任何动画（保持 group 位置由 transform 控制）
+ *
+ * 作用域：
+ *  - 该组件只负责"在 transform 之外叠加时间相关的微动"
+ *  - 不负责 mesh 创建、不负责 transform 写入（由 ClothingOverlay 负责）
+ */
+import { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 
 /**
- * ClothPhysics Component
- * Wraps three-simplecloth for cloth simulation on clothing meshes
- * 
  * @param {Object} props
- * @param {THREE.SkinnedMesh} props.clothingMesh - The clothing mesh to simulate
- * @param {Object} props.config - Physics configuration
- * @param {THREE.Object3D} props.collidersRoot - Object containing colliders
- * @param {Function} props.onError - Error callback
+ * @param {boolean} [props.enabled=true]     是否启用伪布料动画
+ * @param {number}  [props.baseY=0]          基准 Y 位置（通常来自 transform.position[1]）
+ * @param {number}  [props.amplitude=0.012]  顶点 Y 偏移振幅（米）
+ * @param {number}  [props.frequency=2.0]    sin 波频率（弧度/秒）
+ * @param {number}  [props.phase=0]          相位偏移，用于多件服装错开节奏
+ * @param {React.ReactNode} props.children   被包裹的 3D 节点
  */
-export function ClothPhysics({
-  clothingMesh,
-  config = {
-    stiffness: 0.3,
-    dampening: 0.5,
-    windPerSecond: new THREE.Vector3(0, 0, 1),
-    gravityPerSecond: new THREE.Vector3(0, -9.8, 0)
-  },
-  collidersRoot = null,
-  onError
+export default function ClothPhysics({
+  enabled = true,
+  baseY = 0,
+  amplitude = 0.012,
+  frequency = 2.0,
+  phase = 0,
+  children,
 }) {
-  const clothRef = useRef(null);
-  const { gl } = useThree();
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [error, setError] = useState(null);
-  
-  // Initialize cloth simulation
-  useEffect(() => {
-    if (!clothingMesh || !gl) return;
-    
-    let cloth = null;
-    let isMounted = true;
-    
-    const initCloth = async () => {
-      try {
-        // Check if WebGPU is available
-        const canvas = gl.domElement;
-        const context = canvas.getContext('webgpu');
-        
-        if (!context) {
-          console.warn('WebGPU not available, cloth physics disabled');
-          setError('WebGPU not supported - cloth physics disabled');
-          return;
-        }
-        
-        // Create cloth simulation on the mesh
-        cloth = SimpleCloth.onSkinnedMesh(clothingMesh, gl, {
-          stiffness: config.stiffness || 0.3,
-          dampening: config.dampening || 0.5,
-          windPerSecond: new THREE.Vector3(
-            config.wind?.x || 0,
-            config.wind?.y || 0,
-            config.wind?.z || 1
-          ),
-          gravityPerSecond: new THREE.Vector3(
-            config.gravity?.x || 0,
-            config.gravity?.y || -9.8,
-            config.gravity?.z || 0
-          ),
-          collidersRoot: collidersRoot
-        });
-        
-        if (isMounted) {
-          clothRef.current = cloth;
-          setIsInitialized(true);
-        }
-      } catch (err) {
-        console.error('Failed to initialize cloth simulation:', err);
-        if (isMounted) {
-          setError(err.message);
-          if (onError) onError(err);
-        }
-      }
-    };
-    
-    initCloth();
-    
-    return () => {
-      isMounted = false;
-      if (cloth) {
-        cloth.dispose?.();
-      }
-    };
-  }, [clothingMesh, gl, config, collidersRoot, onError]);
-  
-  // Update physics config
-  useEffect(() => {
-    if (!clothRef.current) return;
-    
-    const cloth = clothRef.current;
-    
-    if (config.stiffness !== undefined) {
-      cloth.stiffness = config.stiffness;
-    }
-    if (config.dampening !== undefined) {
-      cloth.dampening = config.dampening;
-    }
-    if (config.wind) {
-      cloth.setWind?.(new THREE.Vector3(config.wind.x, config.wind.y, config.wind.z));
-    }
-    if (config.gravity) {
-      cloth.setGravity?.(new THREE.Vector3(config.gravity.x, config.gravity.y, config.gravity.z));
-    }
-  }, [config]);
-  
-  // Update loop
-  useFrame((state, delta) => {
-    if (clothRef.current && isInitialized) {
-      clothRef.current.update(delta);
-    }
-  });
-  
-  // Return cleanup function
-  const dispose = useCallback(() => {
-    if (clothRef.current) {
-      clothRef.current.dispose?.();
-      clothRef.current = null;
-    }
-  }, []);
-  
-  // Return API
-  return {
-    cloth: clothRef.current,
-    isInitialized,
-    error,
-    dispose,
-    setWind: (wind) => {
-      if (clothRef.current?.setWind) {
-        clothRef.current.setWind(wind);
-      }
-    },
-    setGravity: (gravity) => {
-      if (clothRef.current?.setGravity) {
-        clothRef.current.setGravity(gravity);
-      }
-    }
-  };
-}
+  const groupRef = useRef();
 
-/**
- * Hook for cloth physics simulation
- */
-export function useClothPhysics(clothingMesh, config, collidersRoot) {
-  const physics = ClothPhysics({
-    clothingMesh,
-    config,
-    collidersRoot
+  useFrame(({ clock }) => {
+    if (!enabled || !groupRef.current) return;
+    const t = clock.elapsedTime;
+    groupRef.current.position.y = baseY + Math.sin(t * frequency + phase) * amplitude;
   });
-  
-  return physics;
-}
 
-export default ClothPhysics;
+  // 注意：groupRef.current.position.y 在 enabled=false 时不会被 useFrame 触碰，
+  // 保持 children 自己声明的 position。
+  return <group ref={groupRef}>{children}</group>;
+}

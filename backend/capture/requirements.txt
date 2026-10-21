@@ -1,0 +1,7 @@
+# capture.py requirements
+# pip install -r requirements.txt
+
+websockets>=12.0
+numpy>=1.26.0             # capture.py imports it unconditionally — not actually optional
+opencv-python>=4.9.0      # depth colormapping / alignment helpers
+pyrealsense2>=2.54.0      # Optional — falls back to simulation if not installed

@@ -26,6 +26,7 @@ import Scene from '../core/Scene';
 import VirtualTryOn, { useTryOnState } from '../components/VirtualTryOn';
 import ClothingControls from '../components/ClothingControls';
 import ReconstructionPanel from '../components/ReconstructionPanel';
+import { tryonSessionsApi } from '../api/client';
 import '../styles/global.css';
 
 export default function VirtualTryOnPage() {
@@ -74,8 +75,53 @@ export default function VirtualTryOnPage() {
             vertexOffset={vertexOffset}
             setVertexOffset={setVertexOffset}
           />
+          <SaveSessionPanel
+            clothing={clothing}
+            transform={transform}
+            avatarGlbUrl={pickedGlbUrl}
+          />
         </aside>
       </main>
+    </div>
+  );
+}
+
+function SaveSessionPanel({ clothing, transform, avatarGlbUrl }) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]     = useState(false);
+  const [error, setError]    = useState(null);
+
+  const save = async () => {
+    if (!clothing) return;
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      await tryonSessionsApi.create({
+        clothing_id: clothing.id,
+        avatar_glb_url: avatarGlbUrl ?? null,
+        transform,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h3>保存试衣</h3>
+      <button
+        className="apply"
+        style={{ width: '100%' }}
+        onClick={save}
+        disabled={!clothing || saving}
+      >
+        {saving ? '保存中...' : saved ? '✓ 已保存' : '保存当前试衣'}
+      </button>
+      {error && <p className="err" style={{ marginTop: 8 }}>{error}</p>}
+      {!clothing && <p className="muted">请先选择一件服装</p>}
     </div>
   );
 }

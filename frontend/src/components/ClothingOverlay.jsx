@@ -1,192 +1,128 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+/**
+ * ClothingOverlay.jsx — 服装叠加层。
+ *
+ * 绑定方式（Virtual Try-On Rule #1 优先级）：
+ *  1. group transform（平移/缩放/旋转）—— 主绑定
+ *  2. vertex offset 伪布料 —— 委托给 ClothPhysics 子组件
+ *
+ * 行为：
+ *  - 接收父级传入的 transform（position/rotation/scale）
+ *  - 优先加载 GLB；缺失时回退到程序化几何服装
+ *  - 把 useFrame 内的顶点位移逻辑抽到 ClothPhysics，保持本组件"只挂 mesh + transform"
+ */
+import { useGLTF } from '@react-three/drei';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import ClothPhysics from './ClothPhysics';
+import { isValidGLB } from '../core/GLBLoader';
+
+const TINT = {
+  c01: '#2563eb',
+  c02: '#dc2626',
+  c03: '#16a34a',
+};
 
 /**
- * ClothingOverlay Component
- * Loads and positions a clothing model on the human model
- * 
- * @param {Object} props
- * @param {string} props.clothingUrl - URL or blob URL to clothing GLB
- * @param {THREE.Object3D} props.humanModel - The human model to attach to
- * @param {Object} props.adjustment - Position/rotation/scale adjustments
- * @param {Object} props.physicsConfig - Physics configuration for cloth simulation
- * @param {Function} props.onLoad - Callback when clothing loads
- * @param {Function} props.onError - Callback on error
+ * 程序化服装几何（回退方案）。薄壳 cylinder + torus 模拟贴身衣服。
  */
-export function ClothingOverlay({
-  clothingUrl,
-  humanModel,
-  adjustment = {
-    positionOffset: { x: 0, y: 0, z: 0 },
-    rotationOffset: { x: 0, y: 0, z: 0 },
-    scale: 1.0
-  },
-  physicsConfig = null,
-  onLoad,
-  onError
-}) {
+function ProceduralClothing({ id }) {
   const groupRef = useRef();
-  const [clothing, setClothing] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Load clothing model
-  useEffect(() => {
-    if (!clothingUrl) return;
-    
-    let mounted = true;
-    let currentClothing = null;
-    
-    const loadClothing = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const loader = new GLTFLoader();
-        
-        const gltf = await new Promise((resolve, reject) => {
-          loader.load(
-            clothingUrl,
-            (gltf) => resolve(gltf),
-            (progress) => {
-              console.log(`Clothing load progress: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
-            },
-            (err) => reject(err)
-          );
-        });
-        
-        if (!mounted) return;
-        
-        currentClothing = gltf.scene;
-        
-        // Process the clothing model
-        currentClothing.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            
-            if (child.material) {
-              child.material.side = THREE.DoubleSide;
-            }
-          }
-        });
-        
-        // Apply initial positioning based on adjustment
-        applyAdjustment(currentClothing, adjustment);
-        
-        setClothing(currentClothing);
-        setLoading(false);
-        
-        if (onLoad) {
-          onLoad(currentClothing);
-        }
-        
-      } catch (err) {
-        if (!mounted) return;
-        
-        console.error('Failed to load clothing:', err);
-        setError(err.message || 'Failed to load clothing');
-        setLoading(false);
-        
-        if (onError) {
-          onError(err);
-        }
-      }
-    };
-    
-    loadClothing();
-    
-    return () => {
-      mounted = false;
-    };
-  }, [clothingUrl]);
-  
-  // Update adjustment when it changes
-  useEffect(() => {
-    if (clothing) {
-      applyAdjustment(clothing, adjustment);
-    }
-  }, [adjustment, clothing]);
-  
-  // Apply adjustment to the clothing model
-  const applyAdjustment = (model, adj) => {
-    if (!model) return;
-    
-    // Position offset
-    model.position.x = adj.positionOffset?.x || 0;
-    model.position.y = adj.positionOffset?.y || 0;
-    model.position.z = adj.positionOffset?.z || 0;
-    
-    // Rotation offset (convert degrees to radians)
-    model.rotation.x = THREE.MathUtils.degToRad(adj.rotationOffset?.x || 0);
-    model.rotation.y = THREE.MathUtils.degToRad(adj.rotationOffset?.y || 0);
-    model.rotation.z = THREE.MathUtils.degToRad(adj.rotationOffset?.z || 0);
-    
-    // Scale
-    model.scale.setScalar(adj.scale || 1.0);
-  };
-  
-  // Attach to human model if available
-  useEffect(() => {
-    if (clothing && humanModel) {
-      // Parent the clothing to the human model
-      humanModel.add(clothing);
-      
-      return () => {
-        humanModel.remove(clothing);
-      };
-    }
-  }, [clothing, humanModel]);
-  
-  if (loading || error) {
-    return null;
-  }
-  
+  const color = TINT[id] ?? '#94a3b8';
+
   return (
     <group ref={groupRef}>
-      {clothing && <primitive object={clothing} />}
+      <mesh position={[0, 1.15, 0]} castShadow>
+        <cylinderGeometry args={[0.235, 0.21, 0.7, 32, 1, true]} />
+        <meshStandardMaterial color={color} roughness={0.55} metalness={0.05} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, 1.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.09, 0.018, 12, 32]} />
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+      <mesh position={[-0.31, 1.25, 0]} rotation={[0, 0, 0.12]} castShadow>
+        <cylinderGeometry args={[0.075, 0.06, 0.45, 24, 1, true]} />
+        <meshStandardMaterial color={color} roughness={0.6} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0.31, 1.25, 0]} rotation={[0, 0, -0.12]} castShadow>
+        <cylinderGeometry args={[0.075, 0.06, 0.45, 24, 1, true]} />
+        <meshStandardMaterial color={color} roughness={0.6} side={THREE.DoubleSide} />
+      </mesh>
     </group>
   );
 }
 
 /**
- * Simple Clothing Model Display (without physics)
- * Alternative component for simpler use cases
+ * 真实 GLB 服装（带 group transform）。
  */
-export function SimpleClothingOverlay({
-  clothingUrl,
-  position = [0, 0, 0],
-  rotation = [0, 0, 0],
-  scale = 1
-}) {
-  const [clothing, setClothing] = useState(null);
-  
+function GLBClothing({ url, transform }) {
+  const gltf = useGLTF(url, true, true);
+  const groupRef = useRef();
+
   useEffect(() => {
-    if (!clothingUrl) return;
-    
-    const loader = new GLTFLoader();
-    loader.load(clothingUrl, (gltf) => {
-      const model = gltf.scene;
-      
-      model.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      
-      setClothing(model);
+    if (!gltf?.scene || !groupRef.current) return;
+    gltf.scene.traverse((c) => {
+      if (c.isMesh) {
+        c.castShadow = true;
+        c.receiveShadow = true;
+      }
     });
-  }, [clothingUrl]);
-  
-  if (!clothing) return null;
-  
+    groupRef.current.add(gltf.scene);
+    return () => {
+      groupRef.current?.remove(gltf.scene);
+    };
+  }, [gltf]);
+
   return (
-    <group position={position} rotation={rotation} scale={scale}>
-      <primitive object={clothing} />
-    </group>
+    <group
+      ref={groupRef}
+      position={transform.position ?? [0, 0, 0]}
+      rotation={transform.rotation ?? [0, 0, 0]}
+      scale={transform.scale ?? [1, 1, 1]}
+    />
   );
 }
 
-export default ClothingOverlay;
+function useFallbackState(url) {
+  // 默认 fallback=true：坏 GLB 不会先进 useGLTF
+  const [fb, setFb] = useState(true);
+  useEffect(() => {
+    if (!url) {
+      setFb(true);
+      return;
+    }
+    let alive = true;
+    isValidGLB(url).then((ok) => {
+      if (alive) setFb(!ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  return [fb, setFb];
+}
+
+/**
+ * ClothingOverlay — 把"挂 mesh + transform"和"伪布料动画"两层分离。
+ * 内部用 ClothPhysics 子组件实现 vertex offset 呼吸效果。
+ */
+export default function ClothingOverlay({ clothing, transform, vertexOffset }) {
+  const url = clothing?.model_url;
+  const id = clothing?.id ?? 'unknown';
+  const [useFallback] = useFallbackState(url);
+
+  return (
+    <ClothPhysics enabled={vertexOffset} baseY={transform.position?.[1] ?? 0}>
+      {useFallback || !url ? (
+        <group
+          position={transform.position ?? [0, 0, 0]}
+          rotation={transform.rotation ?? [0, 0, 0]}
+          scale={transform.scale ?? [1, 1, 1]}
+        >
+          <ProceduralClothing id={id} />
+        </group>
+      ) : (
+        <GLBClothing url={url} transform={transform} />
+      )}
+    </ClothPhysics>
+  );
+}

@@ -36,3 +36,22 @@ backend/data/
 *.db
 *.db-wal
 *.db-shm
+
+# Large model weights / vendored upstream — re-download, never commit.
+# models/vitpose-plus-huge/model.safetensors alone is 3.4 GB.
+models/
+SMPLer-X/
+ai_server/data/
+
+# Scratch: headless-Chrome profiles from browser-verification runs (~100 MB)
+.chrome-verify*/
+
+# Scratch: ad-hoc debug dumps at repo root
+_chrome.err
+_dom.html
+_tmp_assets/
+commit_diff.txt
+
+# Editor / agent state
+.obsidian/
+.workbuddy-ai/

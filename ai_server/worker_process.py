@@ -93,9 +93,17 @@ _NORMALIZE_OUT_DIR = Path(__file__).resolve().parent / "data" / "normalized"
 _NORMALIZE_SIZE = 512
 _NORMALIZE_PADDING = 1.1  # crop square side = max(w, h) * padding
 
-# Where reconstructed GLBs land. AI server-side; dev machine mounts via
-# /static/reconstructions in prod (shared volume) or via callback in tests.
-_RECON_OUT_DIR = Path(__file__).resolve().parent / "data" / "reconstructions"
+# Where reconstructed GLBs land. Defaults to ai_server/data/reconstructions;
+# can be overridden by env var so dev / prod / tests can point at the same
+# dir backend serves via /static/reconstructions (no copy step needed).
+# Read at call time so env-var overrides from tests take effect.
+import os as _os
+def _recon_out_dir() -> Path:
+    return Path(_os.environ.get(
+        "FITSCAN_RECON_OUT_DIR",
+        str(Path(__file__).resolve().parent / "data" / "reconstructions"),
+    ))
+_RECON_OUT_DIR_DEFAULT = Path(__file__).resolve().parent / "data" / "reconstructions"
 _GLTF_FIXTURE = Path(__file__).resolve().parent / "data" / "fixtures" / "sample.glb"
 
 
@@ -275,8 +283,9 @@ def run_smpl_fast(task: Task) -> dict[str, Any]:
         src_size = np_.stat().st_size
 
     # 2. Output: copy GLB fixture to a stable path
-    _RECON_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = _RECON_OUT_DIR / f"{recon_id or upload_id}.glb"
+    out_dir = _recon_out_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{recon_id or upload_id}.glb"
     if not _GLTF_FIXTURE.exists():
         raise FileNotFoundError(f"GLB fixture missing: {_GLTF_FIXTURE}")
     out_path.write_bytes(_GLTF_FIXTURE.read_bytes())
@@ -361,8 +370,9 @@ def run_smpl_multi(task: Task) -> dict[str, Any]:
     view_count = len(image_urls)
 
     # Output: single GLB regardless of view count
-    _RECON_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = _RECON_OUT_DIR / f"{recon_id or upload_id}.glb"
+    out_dir = _recon_out_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{recon_id or upload_id}.glb"
     if not _GLTF_FIXTURE.exists():
         raise FileNotFoundError(f"GLB fixture missing: {_GLTF_FIXTURE}")
     out_path.write_bytes(_GLTF_FIXTURE.read_bytes())

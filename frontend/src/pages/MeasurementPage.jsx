@@ -1,40 +1,27 @@
 /**
- * MeasurementPage.jsx — 人体测量页面（拍照上传流）。
+ * MeasurementPage.jsx — 人体测量页面（RealSense 深度流）。
  *
- * 流程：
- * 1. getUserMedia → 实时摄像头预览（前置摄像头）
- * 2. 用户拍摄最多 2 张：正面 / 侧面
- * 3. 自动上传 → POST /api/uploads 收集 upload_ids
- * 4. 触发测量 → POST /api/measurements { upload_ids }
- * 5. 轮询 GET /api/measurements/{id}（2s）直到 status=done
- * 6. 显示身高 / 胸围 / 腰围 / 臀围
- *
- * 注意：当前 useCameraStream 是 RealSense 深度流 WebSocket hook，不适合
- * 拍照流程。本组件直接用浏览器 getUserMedia，不依赖 useCameraStream。
+ * Data flow (SPEC §3.2):
+ *   capture.py (ws://localhost:8765)
+ *     → FastAPI /ws/camera relay
+ *     → useCameraStream (depth frames)
+ *     → useMeasurement (coarse compute, real-time)
+ *     → DepthCanvas (2D depth map visualization)
+ *     → POST /api/ai/measure → useAIInference (precise result)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { uploadsApi } from '../api/client';
 import Navbar from '../components/Navbar';
+import DepthCanvas from '../components/DepthCanvas';
+import useCameraStream from '../hooks/useCameraStream';
+import useMeasurement from '../hooks/useMeasurement';
+import useAIInference from '../hooks/useAIInference';
 import '../styles/global.css';
 
-const SHOT_LABELS = ['正面', '侧面'];
-const MAX_SHOTS = 2;
-
 export default function MeasurementPage() {
-  // shots live in the page so CameraStage (writer) and MeasurementPanel
-  // (reader/uploader) can share them via plain props.
-  const [shots, setShots] = useState([]); // [{label, file, url}]
-
-  const addShot = useCallback((shot) => {
-    setShots((prev) => (prev.length >= MAX_SHOTS ? prev : [...prev, shot]));
-  }, []);
-
-  const resetShots = useCallback(() => {
-    setShots((prev) => {
-      prev.forEach((s) => URL.revokeObjectURL(s.url));
-      return [];
-    });
-  }, []);
+  const [coarseData, setCoarseData] = useState(null);
+  // One instance only: DepthStage's live overlay and the panel's scan controls
+  // must read and write the same scanner state.
+  const measurement = useMeasurement();
 
   return (
     <div className="app">
@@ -42,264 +29,289 @@ export default function MeasurementPage() {
 
       <main className="main">
         <div className="stage">
-          <CameraStage shots={shots} addShot={addShot} resetShots={resetShots} />
+          <DepthStage measurement={measurement} onCoarseResult={setCoarseData} />
         </div>
         <aside className="side">
-          <MeasurementPanel shots={shots} resetShots={resetShots} />
+          <MeasurementPanel coarseData={coarseData} measurement={measurement} />
         </aside>
       </main>
     </div>
   );
 }
 
-/* ─────────────────────────── CameraStage ─────────────────────────── */
+/* ─────────────────────────── DepthStage ─────────────────────────── */
 
-function CameraStage({ shots, addShot, resetShots }) {
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const [error, setError] = useState(null);
+function DepthStage({ measurement, onCoarseResult }) {
+  const { latest: hookLatest, isScanning, processFrame } = measurement;
 
-  // Start / stop webcam on mount / unmount
+  const [depthData, setDepthData] = useState(null);
+  const [depthSize, setDepthSize] = useState({ width: 640, height: 480 });
+
+  const handleFrame = useCallback((frame) => {
+    processFrame(frame);
+    setDepthData(frame.depthData);
+    setDepthSize({ width: frame.width, height: frame.height });
+  }, [processFrame]);
+
+  const { status: camStatus, metadata: camMeta, fps: camFps } = useCameraStream({
+    onFrame: handleFrame,
+    enabled: true,
+  });
+
+  const [latest, setLatest] = useState(null);
+
+  // Sync live coarse result to parent and local state
   useEffect(() => {
-    let cancelled = false;
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 1280, height: 720 },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-      } catch (e) {
-        setError(e.message || '无法访问摄像头');
-      }
-    };
-    start();
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, []);
+    if (hookLatest) {
+      setLatest(hookLatest);
+      onCoarseResult?.(hookLatest);
+    }
+  }, [hookLatest, onCoarseResult]);
 
-  const capture = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !streamRef.current) return;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const idx = shots.length;
-      const url = URL.createObjectURL(blob);
-      const file = new File([blob], `shot-${idx}.jpg`, { type: 'image/jpeg' });
-      addShot({ label: SHOT_LABELS[idx], file, url });
-    }, 'image/jpeg', 0.92);
-  }, [shots.length, addShot]);
-
-  const retake = useCallback(() => {
-    resetShots();
-  }, [resetShots]);
+  const width  = camMeta?.width  ?? depthSize.width;
+  const height = camMeta?.height ?? depthSize.height;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#000' }}>
-      {error ? (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          color: '#fca5a5', fontSize: 14, padding: 20, textAlign: 'center',
-        }}>
-          摄像头错误：{error}
-        </div>
-      ) : (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Depth canvas fills the stage */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#000',
+        overflow: 'hidden',
+      }}>
+        <DepthCanvas
+          depthData={depthData}
+          width={width}
+          height={height}
+          status={camStatus}
+          fps={camFps}
         />
-      )}
+      </div>
 
-      {shots.length < MAX_SHOTS && !error && (
-        <button
-          type="button"
-          className="capture-btn"
-          onClick={capture}
-        >
-          📸 拍照 ({shots.length + 1}/{MAX_SHOTS})
-        </button>
-      )}
-
-      {shots.length === MAX_SHOTS && (
-        <button
-          type="button"
-          className="retake-btn"
-          onClick={retake}
-        >
-          重新拍摄
-        </button>
-      )}
-
-      {shots.length > 0 && (
-        <div className="shot-thumbs">
-          {shots.map((s, i) => (
-            <img
-              key={i}
-              className="shot-thumb"
-              src={s.url}
-              alt={s.label}
-              title={s.label}
-            />
-          ))}
+      {/* Live coarse measurements overlay — top-left */}
+      {isScanning && latest && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          background: 'rgba(0,0,0,0.65)',
+          borderRadius: 6,
+          padding: '6px 12px',
+          fontSize: 12,
+          fontFamily: 'monospace',
+          color: '#e2e8f0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}>
+          <div style={{ color: '#34d399', fontWeight: 600, marginBottom: 2 }}>粗算结果</div>
+          <div>身高: {latest.height} cm</div>
+          <div>肩宽: {latest.shoulder_width} cm</div>
+          <div>胸围: {latest.chest} cm</div>
+          <div>腰围: {latest.waist} cm</div>
         </div>
       )}
+
+      {/* Connection status badge — top-right */}
+      <div style={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        background: 'rgba(0,0,0,0.65)',
+        borderRadius: 6,
+        padding: '4px 10px',
+        fontSize: 12,
+        fontFamily: 'monospace',
+        color: {
+          connecting: '#f59e0b',
+          connected:   '#34d399',
+          error:       '#f87171',
+          closed:      '#f59e0b',
+          idle:        '#64748b',
+        }[camStatus] ?? '#64748b',
+      }}>
+        {{
+          connecting: '连接中...',
+          connected:  `已连接 · ${camFps} FPS`,
+          error:     '未连接',
+          closed:    '未连接（重连中...）',
+          idle:      '未连接',
+        }[camStatus] ?? camStatus}
+      </div>
     </div>
   );
 }
 
-/* ───────────────────────── MeasurementPanel ───────────────────────── */
+/* ───────────────────────── MeasurementPanel ─────────────────────── */
 
-function MeasurementPanel({ shots, resetShots }) {
-  const [phase, setPhase] = useState('idle'); // idle | uploading | measuring | done | error
-  const [progress, setProgress] = useState({ uploaded: 0, total: 0 });
-  const [result, setResult] = useState(null); // { height, chest, waist, hips }
+function MeasurementPanel({ coarseData, measurement }) {
+  const { measure, pollStatus, loading: aiLoading, error: aiError } = useAIInference();
+
+  const [aiState, setAiState] = useState('idle'); // idle | scanning | measuring | done | error
+  const [preciseResult, setPreciseResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const taskIdRef = useRef(null);
 
-  // Reset to idle if shots were cleared (e.g. user hit "重新拍摄" then idle again)
+  const { latest, isScanning, startScan, stopScan } = measurement;
+
+  // Polling effect: start polling when taskId is set, cancel on cleanup/change
   useEffect(() => {
-    if (phase === 'done' && shots.length === 0) {
-      setPhase('idle');
-      setResult(null);
-    }
-  }, [shots.length, phase]);
+    const tid = taskIdRef.current;
+    if (!tid) return;
 
-  const startMeasure = useCallback(async () => {
-    if (shots.length === 0) return;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      setAiState('error');
+      setErrorMsg('AI 测量超时（60 秒）');
+      pollStatus.cancelPoll?.(tid);
+    }, 60_000);
 
-    setPhase('uploading');
+    pollStatus(tid, {
+      interval: 2000,
+      maxAttempts: 30,
+      onResult: (status) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        if (status.status === 'done') {
+          setPreciseResult(status.result ?? status);
+          setAiState('done');
+        } else if (status.status === 'error' || status.status === 'timeout') {
+          setErrorMsg(status.error ?? 'AI 测量失败');
+          setAiState('error');
+        }
+      },
+    });
+
+    return () => {
+      clearTimeout(timer);
+      pollStatus.cancelPoll?.(tid);
+    };
+  }, [taskIdRef.current]); // eslint-disable-line
+
+  const handleStartScan = () => {
+    setAiState('scanning');
     setErrorMsg('');
-    setProgress({ uploaded: 0, total: shots.length });
-
-    // 1. Sequential upload
-    const uploadIds = [];
-    for (let i = 0; i < shots.length; i++) {
-      try {
-        const r = await uploadsApi.create(shots[i].file);
-        uploadIds.push(r.id);
-        setProgress({ uploaded: i + 1, total: shots.length });
-      } catch (e) {
-        setPhase('error');
-        setErrorMsg(`上传失败 (${i + 1}/${shots.length}): ${e.message || e}`);
-        return;
-      }
-    }
-
-    // 2. Trigger measurement
-    setPhase('measuring');
-    // TODO: replace mock with real POST /api/measurements
-    // const session = await measurementsApi.create({ upload_ids: uploadIds });
-    // const sessionId = session.id;
-    const sessionId = 'mock-' + Date.now();
-    const mockResult = { height: 172, chest: 92, waist: 76, hips: 96 };
-
-    // 3. Poll every 2s until done
-    const poll = setInterval(async () => {
-      try {
-        // TODO: replace mock with real GET /api/measurements/{id}
-        // const r = await measurementsApi.get(sessionId);
-        // if (r.status === 'done') { ... }
-        // Simulated: complete after first poll
-        clearInterval(poll);
-        setResult(mockResult);
-        setPhase('done');
-      } catch (e) {
-        clearInterval(poll);
-        setPhase('error');
-        setErrorMsg(`轮询失败: ${e.message || e}`);
-      }
-    }, 2000);
-  }, [shots]);
-
-  const reset = () => {
-    setPhase('idle');
-    setResult(null);
-    setErrorMsg('');
-    setProgress({ uploaded: 0, total: 0 });
-    resetShots();
+    setPreciseResult(null);
+    startScan();
   };
+
+  const handleStopAndMeasure = async () => {
+    const coarse = stopScan();
+    if (!coarse) {
+      setAiState('error');
+      setErrorMsg('未能获取有效粗算数据');
+      return;
+    }
+
+    setAiState('measuring');
+    setErrorMsg('');
+
+    try {
+      const res = await measure(coarse);
+      taskIdRef.current = res.task_id;
+    } catch (e) {
+      setAiState('error');
+      setErrorMsg(`请求失败: ${e.message}`);
+    }
+  };
+
+  const handleRetry = () => {
+    taskIdRef.current = null;
+    setAiState('idle');
+    setPreciseResult(null);
+    setErrorMsg('');
+  };
+
+  // Merge coarse live data for display during scanning
+  const liveResult = preciseResult ?? latest ?? coarseData ?? {};
 
   return (
     <div className="panel">
       <h3>人体测量</h3>
 
-      {phase === 'idle' && (
+      {/* ── idle ── */}
+      {aiState === 'idle' && (
         <>
-          <p className="muted">点击拍照开始 · 已拍 {shots.length}/{MAX_SHOTS}</p>
-          {shots.length > 0 && shots.length < MAX_SHOTS && (
-            <p className="muted">提示：还差 {MAX_SHOTS - shots.length} 张（{SHOT_LABELS[shots.length]}）</p>
-          )}
+          <p className="muted">对准摄像头，点击开始扫描</p>
           <div className="row">
             <button
               className="apply"
               style={{ flex: 1, padding: '8px 12px' }}
-              onClick={startMeasure}
-              disabled={shots.length === 0}
+              onClick={handleStartScan}
             >
-              开始测量
+              开始扫描
             </button>
           </div>
         </>
       )}
 
-      {phase === 'uploading' && (
-        <div className="row">
-          <span className="spinner" />
-          <span className="muted">
-            上传中... {progress.uploaded}/{progress.total}
-          </span>
-        </div>
-      )}
-
-      {phase === 'measuring' && (
-        <div className="row">
-          <span className="spinner" />
-          <span className="muted">测量中...（约10秒）</span>
-        </div>
-      )}
-
-      {phase === 'done' && result && (
+      {/* ── scanning ── */}
+      {aiState === 'scanning' && (
         <>
-          <div className="measure-cards">
-            <MeasureCard label="身高" value={result.height} />
-            <MeasureCard label="胸围" value={result.chest} />
-            <MeasureCard label="腰围" value={result.waist} />
-            <MeasureCard label="臀围" value={result.hips} />
+          <p className="muted" style={{ marginBottom: 8 }}>
+            实时粗算（请保持站立不动）
+          </p>
+          <div className="measure-cards" style={{ fontSize: 13 }}>
+            <MeasureCard label="身高" value={liveResult.height} />
+            <MeasureCard label="肩宽" value={liveResult.shoulder_width} />
+            <MeasureCard label="胸围" value={liveResult.chest} />
+            <MeasureCard label="腰围" value={liveResult.waist} />
           </div>
           <div className="row" style={{ marginTop: 12 }}>
-            <button className="apply" onClick={reset} style={{ flex: 1 }}>
+            <button
+              className="apply"
+              style={{ flex: 1, padding: '8px 12px' }}
+              onClick={handleStopAndMeasure}
+            >
+              停止扫描 + 精确测量
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── measuring ── */}
+      {aiState === 'measuring' && (
+        <div className="row">
+          <span className="spinner" />
+          <span className="muted">AI 精确测量中...</span>
+        </div>
+      )}
+
+      {/* ── done ── */}
+      {aiState === 'done' && preciseResult && (
+        <>
+          <div className="measure-cards">
+            <MeasureCard label="身高"  value={preciseResult.height} />
+            <MeasureCard label="肩宽"  value={preciseResult.shoulder_width} />
+            <MeasureCard label="胸围"  value={preciseResult.chest} />
+            <MeasureCard label="腰围"  value={preciseResult.waist} />
+            <MeasureCard label="臀围"  value={preciseResult.hip ?? preciseResult.hips} />
+            <MeasureCard label="臂长"  value={preciseResult.arm_length ?? preciseResult.inseam} />
+          </div>
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              className="apply"
+              style={{ flex: 1 }}
+              onClick={handleRetry}
+            >
               重新测量
             </button>
           </div>
         </>
       )}
 
-      {phase === 'error' && (
+      {/* ── error ── */}
+      {aiState === 'error' && (
         <>
           <p className="err">错误：{errorMsg}</p>
-          <div className="row">
-            <button className="apply" onClick={reset} style={{ flex: 1 }}>
+          <div className="row" style={{ marginTop: 8 }}>
+            <button
+              className="apply"
+              style={{ flex: 1 }}
+              onClick={handleRetry}
+            >
               重试
             </button>
           </div>
@@ -309,12 +321,15 @@ function MeasurementPanel({ shots, resetShots }) {
   );
 }
 
+/* ─────────────────────────── MeasureCard ───────────────────────── */
+
 function MeasureCard({ label, value }) {
+  if (value == null) return null;
   return (
     <div className="measure-card">
       <div className="measure-label">{label}</div>
       <div className="measure-value">
-        {value}
+        {typeof value === 'number' ? value.toFixed(1) : value}
         <span> cm</span>
       </div>
     </div>

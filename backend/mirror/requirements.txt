@@ -1,0 +1,23 @@
+# backend/mirror/requirements.txt — local real-time mirror subsystem
+#
+# Windows-native, RTX 5070 (Blackwell, sm_120). Verified working set as of 2026-10-21:
+#   python 3.10.21 | pyrealsense2 2.59.1 | opencv 5.0.0 | fastapi 0.156.8
+#   uvicorn 0.54.0 | websockets 16.1.1 | httpx 0.28.1 | pydantic 2.14.1
+#   numpy 2.2.6 | torch 2.11.0+cu128 | Pillow 12.3.0
+#
+# torch is NOT listed here: it comes from the base conda env `torch_gpu` via a
+# --system-site-packages venv (see scripts/setup_mirror_env.sh). Installing torch
+# into the venv would re-download ~3GB and can drop cu128/sm_120 support.
+#
+# Install with --only-binary=:all: — see the note in setup_mirror_env.sh.
+
+websockets>=16.0
+httpx>=0.28.0
+pydantic>=2.9.0
+python-multipart>=0.0.9
+fastapi>=0.115.0
+uvicorn>=0.30.0            # plain, NOT uvicorn[standard]: its httptools/uvloop extras have no cp310 win_amd64 wheel and make pip hang on a source build
+numpy>=1.26.0
+opencv-python>=4.9.0
+pyrealsense2>=2.54.0
+Pillow>=10.0.0

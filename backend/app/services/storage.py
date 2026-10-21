@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from app.api.schemas import ClothingItem, MeasurementSession
+from app.api.schemas import ClothingItem, MeasurementSession, TryonSessionItem, Transform
 
 
 # ─── Database setup ────────────────────────────────────────────────────────────
@@ -80,6 +80,14 @@ def _init_db(conn: sqlite3.Connection):
         CREATE INDEX IF NOT EXISTS idx_recon_created_at ON reconstructions(created_at);
         CREATE INDEX IF NOT EXISTS idx_recon_upload_id  ON reconstructions(upload_id);
         CREATE INDEX IF NOT EXISTS idx_recon_status     ON reconstructions(status);
+
+        CREATE TABLE IF NOT EXISTS tryon_sessions (
+            id             TEXT PRIMARY KEY,
+            clothing_id    TEXT NOT NULL,
+            avatar_glb_url TEXT,
+            transform      TEXT NOT NULL,
+            created_at     TEXT NOT NULL
+        );
     """)
 
     # Idempotent column add for upgrades (CREATE TABLE IF NOT EXISTS won't add columns
@@ -123,6 +131,47 @@ def get_clothing(item_id: str) -> ClothingItem | None:
     conn = _get_db()
     row = conn.execute("SELECT * FROM clothing WHERE id = ?", (item_id,)).fetchone()
     return ClothingItem(**dict(row)) if row else None
+
+
+# H1: user-uploaded clothing. Stored under backend/data/clothing/ which is
+# served at /static/clothing by main.py — so the returned model_url is
+# immediately fetchable by the browser (and Vite-proxied in dev).
+USER_CLOTHING_DIR = DB_PATH.parent / "data" / "clothing"
+
+
+def create_uploaded_clothing(
+    name: str,
+    glb_bytes: bytes,
+    category: str = "top",
+    description: str = "",
+) -> ClothingItem:
+    """Persist a user-uploaded GLB. Returns the new ClothingItem.
+
+    - Picks a uuid-based id (prefix 'usr-') so it cannot collide with
+      seeded c01/c02/c03 entries.
+    - Writes the raw bytes to USER_CLOTHING_DIR/<id>.glb.
+    - Stores model_url as the HTTP path served by main.py's StaticFiles mount.
+    """
+    USER_CLOTHING_DIR.mkdir(parents=True, exist_ok=True)
+    item_id = f"usr-{uuid.uuid4().hex[:12]}"
+    out_path = USER_CLOTHING_DIR / f"{item_id}.glb"
+    out_path.write_bytes(glb_bytes)
+
+    model_url = f"/static/clothing/{item_id}.glb"
+    conn = _get_db()
+    conn.execute(
+        "INSERT OR REPLACE INTO clothing (id, name, model_url, category, description) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (item_id, name, model_url, category, description),
+    )
+    conn.commit()
+    return ClothingItem(
+        id=item_id,
+        name=name,
+        model_url=model_url,
+        category=category,
+        description=description,
+    )
 
 
 # ─── Measurements ──────────────────────────────────────────────────────────────
@@ -185,4 +234,46 @@ def list_measurements(limit: int = 20) -> list[MeasurementSession]:
         "SELECT * FROM measurements ORDER BY created_at DESC LIMIT ?", (limit,)
     ).fetchall()
     return [get_measurement(r["id"]) for r in rows]
+
+
+# ─── Try-on Sessions ──────────────────────────────────────────────────────────
+
+def create_tryon_session(
+    clothing_id: str,
+    avatar_glb_url: str | None,
+    transform: dict,
+) -> TryonSessionItem:
+    sid = f"try-{uuid.uuid4().hex[:12]}"
+    now = datetime.utcnow().isoformat()
+    conn = _get_db()
+    conn.execute(
+        "INSERT INTO tryon_sessions (id, clothing_id, avatar_glb_url, transform, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (sid, clothing_id, avatar_glb_url, json.dumps(transform), now),
+    )
+    conn.commit()
+    return TryonSessionItem(
+        id=sid,
+        clothing_id=clothing_id,
+        avatar_glb_url=avatar_glb_url,
+        transform=Transform(**transform),
+        created_at=datetime.fromisoformat(now),
+    )
+
+
+def list_tryon_sessions(limit: int = 20) -> list[TryonSessionItem]:
+    conn = _get_db()
+    rows = conn.execute(
+        "SELECT * FROM tryon_sessions ORDER BY created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [
+        TryonSessionItem(
+            id=r["id"],
+            clothing_id=r["clothing_id"],
+            avatar_glb_url=r["avatar_glb_url"],
+            transform=Transform(**json.loads(r["transform"])),
+            created_at=datetime.fromisoformat(r["created_at"]),
+        )
+        for r in rows
+    ]
 

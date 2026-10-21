@@ -75,7 +75,8 @@ export default function AvatarEntity({ glbUrl, children, fallback = null }) {
   const mountedRef = useRef(null);
 
   // Track the current URL so we can compare in the effect below.
-  const urlRef = useRef(glbUrl);
+  // Sentinel null ensures the first non-null glbUrl always triggers mount.
+  const urlRef = useRef(null);
 
   useEffect(() => {
     if (!groupRef.current) return;

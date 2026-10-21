@@ -126,3 +126,36 @@ class ReconstructionUpdate(BaseModel):
     glb_path: Optional[str] = None
     metrics: Optional[dict] = None
     ai_task_id: Optional[str] = None
+
+
+# ─── Try-on Sessions ───────────────────────────────────────────────────────────
+
+class Transform(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    position: list[float] = [0.0, 0.0, 0.0]
+    rotation: list[float] = [0.0, 0.0, 0.0]
+    scale:    list[float] = [1.0, 1.0, 1.0]
+
+
+class TryonSessionCreate(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    clothing_id: str
+    avatar_glb_url: Optional[str] = None
+    transform: Transform = Field(default_factory=Transform)
+
+
+class TryonSessionItem(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    id: str
+    clothing_id: str
+    avatar_glb_url: Optional[str] = None
+    transform: Transform
+    created_at: datetime
+
+
+class TryonSessionListResponse(BaseModel):
+    items: list[TryonSessionItem]
+    total: int
