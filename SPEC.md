@@ -1,8 +1,13 @@
 # FitScan System Specification
 
+> **⚠️ 本文件已被 [`docs/FOUNDATION.md`](docs/FOUNDATION.md) 取代（2026-10-21）。**
+> 本文件的 §1.1 硬约束「No GPU on dev machine」已失效，§2.1/§2.3/§2.4 要求的 5 个文件从未创建，
+> §9 的进度标记落后实际 4 个月。保留仅作历史参考。
+> 与本文冲突时一律以 FOUNDATION.md 为准；冲突清单见其 §10。
+
 **System Branch**: `system-architecture-v1`
 **Created**: 2026-06-15
-**Status**: Active
+**Status**: Superseded
 
 **Hardware Context**:
 - Dev machine: Laptop without GPU (runs FastAPI + React dev server)
